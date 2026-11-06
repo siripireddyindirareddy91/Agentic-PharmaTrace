@@ -5,7 +5,7 @@ async function proxy(req:NextRequest,{params}:{params:Promise<{path:string[]}>})
   const {path}=await params;const route=path.join('/');const jar=await cookies();
   if(route==='auth/logout'){jar.delete('pt_session');return NextResponse.json({ok:true})}
   if(!route.startsWith('auth/')&&!jar.get('pt_session')) return NextResponse.json({detail:'Sign in required'},{status:401});
-  const base=process.env.API_URL||'http://127.0.0.1:8000';
+  const base=process.env.BACKEND_INTERNAL_URL||process.env.API_URL||'http://127.0.0.1:8000';
   try{
     const headers=new Headers();if(req.headers.get('content-type'))headers.set('content-type',req.headers.get('content-type')!);
     const session=jar.get('pt_session')?.value;if(session)headers.set('Authorization','Bearer '+session);

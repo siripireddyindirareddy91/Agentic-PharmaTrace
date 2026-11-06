@@ -18,7 +18,12 @@ def current(request:Request, db=Depends(get_db)):
     raw=request.headers.get('authorization','').removeprefix('Bearer ')
     if not raw: raise HTTPException(401,'Sign in required')
     try:
-        return jwt.decode(raw,SECRET,algorithms=['HS256'])
+        payload=jwt.decode(raw,SECRET,algorithms=['HS256'])
+        if payload.get('email')!='demo@example.test':
+            stored=db.query(User).filter_by(id=payload.get('id')).first()
+            if not stored: raise HTTPException(401,'Account no longer exists')
+            payload.update(role=stored.role,org=stored.org)
+        return payload
     except jwt.InvalidTokenError:
         if os.getenv('SUPABASE_URL'):
             try:
