@@ -1,8 +1,8 @@
 {
   "$schema":"https://openapi.vercel.sh/vercel.json",
   "services":{
-    "frontend":{"root":"frontend","framework":"nextjs","bindings":[{"type":"service","service":"backend","format":"url","env":"BACKEND_INTERNAL_URL"}]},
+    "frontend":{"root":"frontend","framework":"nextjs"},
     "backend":{"root":"backend","entrypoint":"app.main:app","framework":"fastapi"}
   },
-  "rewrites":[{"source":"/health","destination":{"service":"backend"}},{"source":"/(.*)","destination":{"service":"frontend"}}]
+  "rewrites":[{"source":"/api/(.*)","destination":{"service":"backend"}},{"source":"/health","destination":{"service":"backend"}},{"source":"/(.*)","destination":{"service":"frontend"}}]
 }

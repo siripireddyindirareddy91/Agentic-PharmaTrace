@@ -1,7 +1,7 @@
 import os, re, io, csv, time, secrets, json
 from datetime import date
 from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +22,11 @@ def ml_predict(body:dict,user=Depends(current)):
     return predict(body)
 @app.middleware('http')
 async def security_headers(request, call_next):
+    if request.method not in ['GET','HEAD','OPTIONS'] and request.cookies.get('pt_session'):
+        from urllib.parse import urlparse
+        origin=request.headers.get('origin')
+        if origin and urlparse(origin).netloc!=request.headers.get('host'):
+            return JSONResponse({'detail':'Cross-origin mutation rejected'},status_code=403)
     response=await call_next(request)
     response.headers['X-Content-Type-Options']='nosniff'
     response.headers['Cache-Control']='no-store'
@@ -83,6 +88,13 @@ def get_record(db,kind,id,user):
     if not r: raise HTTPException(404,'Record not found')
     return r
 def identity(u): return {'id':u.id,'email':u.email,'name':u.name,'role':u.role,'org':u.org}
+def session_response(payload):
+    response=JSONResponse(payload)
+    response.set_cookie('pt_session',payload['token'],httponly=True,secure=bool(os.getenv('VERCEL')),samesite='lax',max_age=28800,path='/')
+    return response
+@app.post('/api/auth/logout')
+def logout():
+    response=JSONResponse({'ok':True});response.delete_cookie('pt_session',path='/');return response
 rate={}
 def limited(key, count=30):
     tick=int(time.time()//60); bucket=(key,tick)
@@ -99,7 +111,7 @@ def demo(request:Request, db=Depends(get_db)):
     # Each demo session receives an isolated organization and dataset.
     org='demo-'+secrets.token_hex(8); seed(db,org)
     u={'id':uid(),'email':'demo@example.test','name':'Alex Morgan','role':'System Administrator','org':org}
-    return {'token':token(u),'user':u,'demo':True}
+    return session_response({'token':token(u),'user':u,'demo':True})
 @app.post('/api/auth/register')
 def register(body:Credentials,request:Request,db=Depends(get_db)):
     limited('register:'+str(request.client.host),5)
@@ -110,7 +122,7 @@ def register(body:Credentials,request:Request,db=Depends(get_db)):
     org='org-'+uid()
     u=User(email=body.email,password=password_hash(body.password),name=body.name,org=org,role='Pharmacist');db.add(u);db.flush()
     if DEMO: seed(db,org)
-    return {'token':token(identity(u)),'user':identity(u),'demo':DEMO}
+    return session_response({'token':token(identity(u)),'user':identity(u),'demo':DEMO})
 @app.post('/api/auth/login')
 def login(body:Credentials,request:Request,db=Depends(get_db)):
     limited('login:'+str(request.client.host),10)
@@ -118,9 +130,9 @@ def login(body:Credentials,request:Request,db=Depends(get_db)):
     if os.getenv('SUPABASE_URL'):
         response=httpx.post(os.environ['SUPABASE_URL']+'/auth/v1/token?grant_type=password',headers={'apikey':os.environ['SUPABASE_ANON_KEY']},json={'email':body.email,'password':body.password},timeout=15)
         if response.status_code>=400 or not u: raise HTTPException(401,'Invalid credentials')
-        return {'token':response.json()['access_token'],'user':identity(u),'demo':False}
+        return session_response({'token':response.json()['access_token'],'user':identity(u),'demo':False})
     if not u or not password_check(body.password,u.password): raise HTTPException(401,'Invalid credentials')
-    return {'token':token(identity(u)),'user':identity(u),'demo':DEMO}
+    return session_response({'token':token(identity(u)),'user':identity(u),'demo':DEMO})
 @app.get('/api/auth/me')
 def me(user=Depends(current)): return user
 @app.get('/api/data')

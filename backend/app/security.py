@@ -15,7 +15,7 @@ def get_db():
         try: yield db; db.commit()
         except Exception: db.rollback(); raise
 def current(request:Request, db=Depends(get_db)):
-    raw=request.headers.get('authorization','').removeprefix('Bearer ')
+    raw=request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('pt_session','')
     if not raw: raise HTTPException(401,'Sign in required')
     try:
         payload=jwt.decode(raw,SECRET,algorithms=['HS256'])
