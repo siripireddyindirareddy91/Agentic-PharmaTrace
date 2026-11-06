@@ -1,0 +1,27 @@
+# Deployment guide
+
+## Frontend on Vercel
+
+Import the GitHub repository with root `frontend`, framework Next.js and build `npm run build`. Set server-only API_URL to the backend HTTPS origin without `/api`. No secrets may use NEXT_PUBLIC_ prefixes.
+
+## FastAPI on Vercel
+
+Import the repository with root `backend` and framework Other. `api/index.py` exposes the ASGI app. Set a stable cryptographically random JWT_SECRET, DEMO_MODE=true and ALLOWED_ORIGINS to the frontend origin. Supply DATABASE_URL for persistence. Without it the hosted demo explicitly uses ephemeral `/tmp` SQLite and must not retain real pharmaceutical records.
+
+## Render alternative
+
+Use render.yaml, or build `pip install -r requirements.txt` and start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Health check `/health`; API documentation `/docs`. Use durable PostgreSQL rather than an ephemeral disk.
+
+## Supabase setup
+
+Create a project and use its PostgreSQL pooler URL as DATABASE_URL with dialect `postgresql+psycopg://`. Runtime tables are initialized by SQLAlchemy. Set SUPABASE_URL and SUPABASE_ANON_KEY for optional Auth integration. Provision organization memberships under administrator control. Disable DEMO_MODE for real data. Use a least-privileged server database role and reviewed RLS policies. The normalized reference schema is separate from the current runtime repository and requires an explicit migration.
+
+## Troubleshooting
+
+- API 503: inspect API_URL, backend `/health`, runtime logs and deployment protection.
+- 401 after restart: set a stable JWT_SECRET. After ephemeral database recycling, start a fresh demo session.
+- 403: the authenticated role is not authorized. Registration deliberately grants Pharmacist rights.
+- Camera unavailable: use serial input; camera requires HTTPS and BarcodeDetector support.
+- Windows Turbopack worker failure: use the documented webpack build.
+
+Before real-world use, configure durable PostgreSQL, verified Supabase authentication, shared rate limits, durable file storage, organization invitations, monitoring, backup/restore and security review. Complete the relational repository migration and stock reconciliation. This demo has no regulatory validation.

@@ -1,0 +1,19 @@
+{
+  "precision": 0.811965811965812,
+  "recall": 0.867579908675799,
+  "f1": 0.8388520971302428,
+  "confusion_matrix": [
+    [
+      724,
+      88
+    ],
+    [
+      58,
+      380
+    ]
+  ],
+  "roc_auc": 0.9467969048743731,
+  "train_samples": 3750,
+  "test_samples": 1250,
+  "disclosure": "Synthetic labels and features only. These metrics do not establish real-world counterfeit detection accuracy."
+}
