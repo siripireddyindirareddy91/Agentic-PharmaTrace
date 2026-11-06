@@ -25,7 +25,8 @@ def seed(db, org='demo'):
             add(db,'temperatures',{'shipment_id':f'{org}-shipment-{i}','temperature':round((4.5 if cold else 23)+(j%4-2)*.6+(8 if i==2 and j>7 else 0),1),'timestamp':(datetime.now(timezone.utc)-timedelta(hours=12-j)).isoformat()},org)
         add(db,'inventory',{'product':DRUGS[b%15],'batch_id':f'{org}-batch-{b}','location':CITIES[i%10],'quantity':100+i*10,'status':'Quarantined' if i==7 else 'Available'},org)
     for i in range(30):
-        add(db,'verifications',{'serial':f'PT-2026-{i+1:06}','product':DRUGS[(i%25)%15],'status':'Suspicious' if i%7==0 else 'Verified','risk':65 if i%7==0 else 5,'location':CITIES[i%10],'evidence':[],'mode':'Synthetic seed'},org)
+        v=add(db,'verifications',{'serial':f'PT-2026-{i+1:06}','product':DRUGS[(i%25)%15],'status':'Suspicious' if i%7==0 else 'Verified','risk':65 if i%7==0 else 5,'location':CITIES[i%10],'evidence':[],'mode':'Synthetic seed'},org)
+        db.get(Record,v['id']).created_at=(datetime.now(timezone.utc)-timedelta(days=i+1)).isoformat()
     for i,(title,cat) in enumerate([('Temperature excursion on insulin shipment','Cold chain'),('Unexpected route change detected','Shipment'),('Incomplete custody records','Traceability'),('Expired batch requires review','Expiry')]):
         add(db,'alerts',{'title':title,'category':cat,'priority':['Critical','High','Medium','High'][i],'status':'Open','serial':f'PT-2026-{i+3:06}'},org)
     add(db,'investigations',{'title':'Review insulin temperature excursion','serial':'PT-2026-000003','risk':70,'status':'New','assigned_to':'Unassigned','notes':[],'approvals':[],'evidence':[],'recommendation':'Inspect shipment and request authorized review.'},org)

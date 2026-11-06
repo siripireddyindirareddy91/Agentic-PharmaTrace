@@ -1,6 +1,6 @@
 # Architecture
 
-Browser → Next.js App Router → same-origin API proxy → FastAPI → SQLAlchemy → SQLite locally or PostgreSQL through DATABASE_URL. The proxy keeps the bearer token in an HttpOnly SameSite=Lax cookie. Backend checks identity, role and organization. No service keys enter browser bundles.
+Production: Browser → Vercel Services route table → Next.js for UI or FastAPI for `/api/*` → SQLAlchemy → ephemeral demo SQLite or configured PostgreSQL. FastAPI issues an HttpOnly SameSite=Lax cookie and checks identity, role, organization and mutation origins. Local development uses the same-origin Next.js proxy to reach the local FastAPI port. No service keys enter browser bundles.
 
 LangGraph shares retrieved evidence across Orchestrator, Traceability, Batch Verification, Counterfeit Detection, Shipment Monitoring, Cold Chain Monitoring, Risk Assessment, Investigation, Compliance & Policy, and Report Generation. High-risk results conditionally route through Investigation; shipment tasks skip identity-specific agents. Each node records duration and success/failure. Incomplete workflows produce Unverified results requiring manual review.
 

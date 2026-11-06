@@ -115,13 +115,18 @@ def demo(request:Request, db=Depends(get_db)):
 @app.post('/api/auth/register')
 def register(body:Credentials,request:Request,db=Depends(get_db)):
     limited('register:'+str(request.client.host),5)
+    supabase_session=None
     if os.getenv('SUPABASE_URL'):
         response=httpx.post(os.environ['SUPABASE_URL']+'/auth/v1/signup',headers={'apikey':os.environ['SUPABASE_ANON_KEY']},json={'email':body.email,'password':body.password},timeout=15)
         if response.status_code>=400: raise HTTPException(400,'Registration failed. Check email or account configuration.')
+        supabase_session=response.json().get('access_token')
     if db.query(User).filter_by(email=body.email).first(): raise HTTPException(409,'Account already exists')
     org='org-'+uid()
     u=User(email=body.email,password=password_hash(body.password),name=body.name,org=org,role='Pharmacist');db.add(u);db.flush()
     if DEMO: seed(db,org)
+    if os.getenv('SUPABASE_URL'):
+        if supabase_session: return session_response({'token':supabase_session,'user':identity(u),'demo':False})
+        return {'confirmation_required':True,'message':'Check your email to confirm your account, then sign in.'}
     return session_response({'token':token(identity(u)),'user':identity(u),'demo':DEMO})
 @app.post('/api/auth/login')
 def login(body:Credentials,request:Request,db=Depends(get_db)):

@@ -236,6 +236,11 @@ export default function Platform() {
     setError("");
     try {
       const r = await api("auth/" + (demo ? "demo" : authMode), body || {});
+      if (r.confirmation_required) {
+        setError(r.message);
+        setAuthMode("login");
+        return;
+      }
       setUser(r.user);
       await load();
       router.push("/dashboard");
@@ -497,7 +502,7 @@ export default function Platform() {
             <h1>
               Every medicine.
               <br />
-              Every movement.
+              Every movement.{" "}
               <br />
               <span>Accounted for.</span>
             </h1>
