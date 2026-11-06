@@ -1795,6 +1795,8 @@ export default function Platform() {
               ["detail", "DETAIL"],
               ["created_at", "RECORDED"],
             ])}
+          {path === "batches" && <section className="panel panel-padding" style={{marginTop:20}}><h2>Import product registry</h2><p>CSV or XLSX, up to 500 rows / 1 MB. Required columns: name, manufacturer. Optional: category, min_temp, max_temp, barcode. Entire file is validated before records are written.</p><label>Upload registry<input type="file" accept=".csv,.xlsx" disabled={busy} onChange={e=>{const file=e.target.files?.[0];if(file){const body=new FormData();body.append('file',file);action(async()=>{const r=await api('import/products',body);notify(`${r.imported} products imported`)},'Product registry imported')}}}/></label></section>}
+          {path === "inventory" && <section className="panel panel-padding" style={{marginTop:20}}><h2>Transfer available stock</h2><form onSubmit={e=>{e.preventDefault();const body:Row=Object.fromEntries(new FormData(e.currentTarget));body.quantity=Number(body.quantity);body.idempotency_key=crypto.randomUUID();action(()=>api('inventory/transfer',body),'Stock transferred and audited')}}><label>Batch<select name="batch_id" required>{data.batches?.map(b=><option key={b.id} value={b.id}>{b.batch_number} — {b.product}</option>)}</select></label><label>Origin<input name="origin" required placeholder="Hyderabad"/></label><label>Destination<input name="destination" required placeholder="Mumbai"/></label><label>Quantity<input name="quantity" type="number" required min="1"/></label><label>Transfer reason<textarea name="reason" required minLength={10}/></label><button className="button" disabled={busy}>Transfer stock</button></form></section>}
           {path === "reports" && (
             <>
               <div className="report-grid">
@@ -1824,6 +1826,7 @@ export default function Platform() {
                         <Download size={15} />
                         CSV
                       </Button>
+                      <Button secondary disabled={busy} onClick={()=>report(kind,"xlsx")}><Download size={15}/>Excel</Button>
                       <Button
                         secondary
                         disabled={busy}

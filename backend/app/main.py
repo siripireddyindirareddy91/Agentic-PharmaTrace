@@ -299,13 +299,26 @@ def role(id:str,body:RoleInput,user=Depends(current),db=Depends(get_db)):
 def reports(user=Depends(current),db=Depends(get_db)): return records(db,'reports',user['org'])
 class ReportInput(BaseModel):
     kind:str=Field(default='verifications',pattern='^(verifications|batches|shipments|events|investigations|audit|inventory|alerts)$')
-    format:str=Field(default='csv',pattern='^(csv|pdf)$')
+    format:str=Field(default='csv',pattern='^(csv|pdf|xlsx)$')
     search:str=Field(default='',max_length=100)
 @app.post('/api/reports/generate')
 def generate_report(body:ReportInput,user=Depends(current),db=Depends(get_db)):
     rows=[r for r in records(db,body.kind,user['org']) if body.search.lower() in json.dumps(r).lower()]
     add(db,'reports',{'name':body.kind.title()+' report','format':body.format,'records':len(rows),'filters':body.search,'generated_by':user['email']},user['org']);audit(db,user,'Export report',body.kind)
-    if body.format=='csv':
+    if body.format=='xlsx':
+        from openpyxl import Workbook
+        workbook=Workbook();sheet=workbook.active;sheet.title='PharmaTrace'
+        sheet.append(['Organization',user['org']]);sheet.append(['Generated',now()]);sheet.append(['Filters',body.search]);sheet.append(['Synthetic demonstration; not regulatory approval'])
+        keys=sorted({k for r in rows for k,v in r.items() if not isinstance(v,(dict,list))});sheet.append(keys)
+        for row in rows:
+            values=[]
+            for key in keys:
+                value=row.get(key,'')
+                if isinstance(value,str) and value.startswith(('=','+','-','@')):value="'"+value
+                values.append(value)
+            sheet.append(values)
+        sheet.freeze_panes='A6';out=io.BytesIO();workbook.save(out);content=out.getvalue();mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    elif body.format=='csv':
         out=io.StringIO();keys=sorted({k for r in rows for k,v in r.items() if not isinstance(v,(dict,list))})
         writer=csv.DictWriter(out,fieldnames=keys,extrasaction='ignore');writer.writeheader()
         for r in rows:
@@ -325,3 +338,6 @@ def generate_report(body:ReportInput,user=Depends(current),db=Depends(get_db)):
             line(' | '.join(f'{k}: {v}' for k,v in r.items() if not isinstance(v,(dict,list))));y-=8
         c.save();content=stream.getvalue();mime='application/pdf'
     return Response(content,media_type=mime,headers={'Content-Disposition':f'attachment; filename="pharmatrace-{body.kind}.{body.format}"'})
+
+from .operations import install
+install(app,ProductInput)

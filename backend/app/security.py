@@ -5,6 +5,8 @@ from .database import Session, User
 
 SECRET=os.getenv('JWT_SECRET') or secrets.token_hex(32)
 DEMO=os.getenv('DEMO_MODE','true').lower()=='true'
+if not DEMO and (not os.getenv('JWT_SECRET') or len(os.getenv('JWT_SECRET',''))<32 or not os.getenv('DATABASE_URL','').startswith(('postgres','postgresql'))):
+    raise RuntimeError('Production requires PostgreSQL DATABASE_URL and a stable JWT_SECRET of at least 32 characters')
 def password_hash(password, salt=None):
     salt=salt or secrets.token_hex(16)
     return salt+':'+hashlib.pbkdf2_hmac('sha256',password.encode(),salt.encode(),310000).hex()

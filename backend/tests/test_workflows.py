@@ -11,7 +11,7 @@ client=TestClient(app)
 def auth():
     r=client.post('/api/auth/demo');assert r.status_code==200,r.text
     return {'Authorization':'Bearer '+r.json()['token']}
-def test_requires_auth(): assert client.get('/api/data').status_code==401
+def test_requires_auth(): assert TestClient(app).get('/api/data').status_code==401
 def test_seed_and_metrics(auth):
     d=client.get('/api/data',headers=auth).json()
     assert len(d['products'])==15 and len(d['batches'])==25 and len(d['serials'])==100 and len(d['shipments'])==20 and len(d['events'])>=50
