@@ -1,0 +1,54 @@
+-- Normalized production-design reference. Runtime repository migration required.
+-- Deliberately isolated to avoid replacing the executable demo's tables.
+create schema if not exists pharmatrace;
+create extension if not exists pgcrypto;
+set search_path to pharmatrace, public;
+create table organizations(id uuid primary key default gen_random_uuid(),name text not null,type text not null,location text,created_at timestamptz not null default now());
+create table users(id uuid primary key, email text unique not null,name text not null,created_at timestamptz not null default now());
+create table organization_members(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,user_id uuid not null references users,role text not null,unique(organization_id,user_id));
+create table manufacturers(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,registration_number text unique not null,status text not null default 'Unverified');
+create table distributors(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,registration_number text unique not null);
+create table pharmacies(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,registration_number text unique not null);
+create table hospitals(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,registration_number text unique not null);
+create table products(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,manufacturer_id uuid not null references manufacturers,name text not null,category text not null,min_temp numeric not null,max_temp numeric not null,barcode text,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),check(min_temp<max_temp));
+create table product_batches(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,product_id uuid not null references products,batch_number text not null,manufactured date not null,expiry date not null,quantity integer not null check(quantity>0),quality_status text not null,status text not null default 'Active',created_at timestamptz not null default now(),updated_at timestamptz not null default now(),unique(organization_id,batch_number),check(expiry>manufactured));
+create table serialized_products(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,batch_id uuid not null references product_batches,serial_number text not null,status text not null default 'Unverified',created_at timestamptz not null default now(),unique(organization_id,serial_number));
+create table qr_codes(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,serialized_product_id uuid not null unique references serialized_products,payload text not null,created_at timestamptz not null default now());
+create table supply_chain_events(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,serialized_product_id uuid not null references serialized_products,event_type text not null,location text not null,actor_id uuid references users,occurred_at timestamptz not null,created_at timestamptz not null default now());
+create table inventory(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,batch_id uuid not null references product_batches,location text not null,quantity integer not null check(quantity>=0),status text not null,updated_at timestamptz not null default now(),unique(organization_id,batch_id,location,status));
+create table inventory_transactions(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,inventory_id uuid not null references inventory,quantity integer not null,transaction_type text not null,actor_id uuid references users,created_at timestamptz not null default now());
+create table shipments(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,reference text not null,origin text not null,destination text not null,status text not null,expected_delivery timestamptz,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),unique(organization_id,reference));
+create table shipment_items(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,shipment_id uuid not null references shipments,batch_id uuid not null references product_batches,quantity integer not null check(quantity>0));
+create table shipment_tracking_events(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,shipment_id uuid not null references shipments,status text not null,location text not null,created_at timestamptz not null default now());
+create table temperature_readings(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,shipment_id uuid not null references shipments,temperature numeric not null,sensor text,occurred_at timestamptz not null,created_at timestamptz not null default now());
+create table verification_records(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,serialized_product_id uuid references serialized_products,submitted_serial text not null,risk integer not null check(risk between 0 and 100),status text not null,evidence jsonb not null default '[]',location text,actor_id uuid references users,created_at timestamptz not null default now());
+create table counterfeit_alerts(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,verification_id uuid references verification_records,title text not null,priority text not null,status text not null default 'Open',created_at timestamptz not null default now());
+create table investigations(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,verification_id uuid references verification_records,title text not null,status text not null default 'New',assigned_user_id uuid references users,resolution text,created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create table investigation_evidence(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,investigation_id uuid not null references investigations,filename text not null,storage_path text not null,sha256 text not null,uploaded_by uuid references users,created_at timestamptz not null default now());
+create table investigation_notes(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,investigation_id uuid not null references investigations,body text not null,actor_id uuid references users,created_at timestamptz not null default now());
+create table agent_executions(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,task text not null,status text not null,shared_state jsonb not null,created_at timestamptz not null default now());
+create table agent_findings(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,execution_id uuid not null references agent_executions,agent_name text not null,evidence jsonb not null,duration_ms numeric not null,created_at timestamptz not null default now());
+create table notifications(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,user_id uuid references users,title text not null,acknowledged boolean not null default false,created_at timestamptz not null default now());
+create table audit_logs(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,actor_id uuid references users,action text not null,entity_id uuid,detail jsonb not null default '{}',created_at timestamptz not null default now());
+create table compliance_policies(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,name text not null,body text not null,version integer not null default 1,created_at timestamptz not null default now());
+create table human_approvals(id uuid primary key default gen_random_uuid(),organization_id uuid not null references organizations,investigation_id uuid not null references investigations,actor_id uuid not null references users,action text not null check(action in ('quarantine','release','recall','destruction')),decision text not null check(decision in ('approved','rejected')),reason text not null check(length(reason)>=10),created_at timestamptz not null default now());
+create index custody_serial_time on supply_chain_events(serialized_product_id,occurred_at);
+create index shipment_temperature_time on temperature_readings(shipment_id,occurred_at);
+create index verification_serial_time on verification_records(submitted_serial,created_at);
+create index investigation_status on investigations(organization_id,status);
+create index alert_status on counterfeit_alerts(organization_id,status);
+-- Supabase auth.uid() identifies the caller. Clients receive read access only;
+-- all mutations go through the authenticated, role-checked backend.
+alter table organization_members enable row level security;
+create policy own_membership on organization_members for select using(user_id=auth.uid());
+do $$ declare t text; begin
+  foreach t in array array['manufacturers','distributors','pharmacies','hospitals','products','product_batches','serialized_products','qr_codes','supply_chain_events','inventory','inventory_transactions','shipments','shipment_items','shipment_tracking_events','temperature_readings','verification_records','counterfeit_alerts','investigations','investigation_evidence','investigation_notes','agent_executions','agent_findings','notifications','audit_logs','compliance_policies','human_approvals'] loop
+    execute format('alter table %I enable row level security',t);
+    execute format('create policy org_read on %I for select using (organization_id in (select organization_id from pharmatrace.organization_members where user_id=auth.uid()))',t);
+    execute format('create index on %I (organization_id)',t);
+  end loop;
+end $$;
+alter table organizations enable row level security;
+create policy member_org on organizations for select using(id in(select organization_id from organization_members where user_id=auth.uid()));
+alter table users enable row level security;
+create policy own_profile on users for select using(id=auth.uid());

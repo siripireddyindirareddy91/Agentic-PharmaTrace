@@ -1,5 +1,13 @@
 # Deployment guide
 
+## Current unified deployment
+
+The root vercel.json uses Vercel Services (beta): Next.js and FastAPI build separately and deploy atomically in `pharmatrace-ai`. A private service binding injects BACKEND_INTERNAL_URL into the frontend at runtime. Only the frontend has a public ingress route; the API proxy forwards authenticated requests to the private backend. No backend protection-bypass credential is created. Deploy from the repository root with no rootDirectory override. The project-level framework should remain unset; frameworks are set per service.
+
+The user requested deployment without adding credentials. JWT_SECRET is therefore generated per backend process. Sessions can expire on instance recycling, and SQLite demo data is ephemeral. Do not use this deployment to retain real records. Vercel's existing deployment protection is preserved. A separate API project was also deployed during setup; the unified app uses its own private backend instead.
+
+GitHub source is pushed, but the Vercel connector's GitHub integration did not have repository-link access. Deployment used the tracked source-file catalog. Automatic deploy-on-push is not configured; connect the repository in Vercel when its GitHub integration has access.
+
 ## Frontend on Vercel
 
 Import the GitHub repository with root `frontend`, framework Next.js and build `npm run build`. Set server-only API_URL to the backend HTTPS origin without `/api`. No secrets may use NEXT_PUBLIC_ prefixes.

@@ -4,5 +4,5 @@
     "frontend":{"root":"frontend","framework":"nextjs","bindings":[{"type":"service","service":"backend","format":"url","env":"BACKEND_INTERNAL_URL"}]},
     "backend":{"root":"backend","entrypoint":"app.main:app","framework":"fastapi"}
   },
-  "rewrites":[{"source":"/(.*)","destination":{"service":"frontend"}}]
+  "rewrites":[{"source":"/health","destination":{"service":"backend"}},{"source":"/(.*)","destination":{"service":"frontend"}}]
 }

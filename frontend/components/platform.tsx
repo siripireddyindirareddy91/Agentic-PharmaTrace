@@ -1,83 +1,2444 @@
-'use client';
-import {useState,useEffect,useMemo,useRef} from 'react';
-import Link from 'next/link';
-import {usePathname,useRouter} from 'next/navigation';
-import {Activity,ArrowDownToLine,ArrowRight,ArrowUpRight,Bell,Box,Building2,Check,CheckCircle2,ChevronDown,ChevronLeft,ChevronRight,ClipboardList,Download,FileText,FlaskConical,Globe2,LayoutDashboard,LogOut,MapPin,Menu,Package,Plus,Search,Settings,Shield,ShieldCheck,ShieldAlert,Sparkles,Thermometer,Truck,Users,X,Zap,ScanLine,GitBranch,Clock,AlertTriangle,Send,RefreshCw,Camera} from 'lucide-react';
-import {ResponsiveContainer,AreaChart,Area,XAxis,YAxis,CartesianGrid,Tooltip,BarChart,Bar,PieChart,Pie,Cell,LineChart,Line} from 'recharts';
-import QRCode from 'qrcode';
-import {api,Row} from '@/lib/api';
+"use client";
+import { useState, useEffect, useMemo, useRef } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  Activity,
+  ArrowDownToLine,
+  ArrowRight,
+  ArrowUpRight,
+  Bell,
+  Box,
+  Building2,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Download,
+  FileText,
+  FlaskConical,
+  Globe2,
+  LayoutDashboard,
+  LogOut,
+  MapPin,
+  Menu,
+  Package,
+  Plus,
+  Search,
+  Settings,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  Sparkles,
+  Thermometer,
+  Truck,
+  Users,
+  X,
+  Zap,
+  ScanLine,
+  GitBranch,
+  Clock,
+  AlertTriangle,
+  Send,
+  RefreshCw,
+  Camera,
+} from "lucide-react";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+} from "recharts";
+import QRCode from "qrcode";
+import { api, Row } from "@/lib/api";
 
-const navigation:[string,string,any][]=[['dashboard','Overview',LayoutDashboard],['supply-chain','Supply chain map',Globe2],['traceability','Drug traceability',GitBranch],['verification','Drug authentication',ScanLine],['counterfeit-detection','Counterfeit detection',ShieldAlert],['batches','Batch management',Package],['manufacturers','Manufacturers',Building2],['distributors','Distributors',Truck],['pharmacies','Pharmacies & hospitals',Users],['shipments','Shipment monitoring',Truck],['cold-chain','Cold chain monitoring',Thermometer],['agents','AI agent center',Sparkles],['investigations','Investigation center',ClipboardList],['analytics','Risk analytics',Activity],['alerts','Alerts & notifications',Bell],['audit','Audit logs',ShieldCheck],['reports','Reports',FileText],['inventory','Inventory',Box],['users','User management',Users],['settings','Settings',Settings]];
-const descriptions:Record<string,string>={dashboard:'A clear view of every medicine, movement, and risk.',verification:'Verify serialized medicines against registered evidence.',traceability:'Follow the complete chain of custody, from origin to receipt.',agents:'Coordinated intelligence. Transparent evidence. Human oversight.',investigations:'Turn suspicious signals into documented decisions.',analytics:'Understand the signals across your pharmaceutical network.',shipments:'Monitor movement and keep every delivery accountable.','cold-chain':'Product-specific temperature intelligence for every shipment.','supply-chain':'Your connected pharmaceutical network, in one view.'};
-function Badge({value}:{value:any}){const text=String(value??'Unknown');const lower=text.toLowerCase();return <span className={'badge '+(/verified|delivered|registered|passed|completed|active|resolved|available|approved/.test(lower)&&!lower.includes('unverified')?'green':/critical|expired|counterfeit|quarantined|failed|rejected/.test(lower)?'red':/high|suspicious|delayed|duplicate|open|awaiting/.test(lower)?'amber':'blue')}>{text}</span>}
-function Empty({text='No records match your filters.'}:{text?:string}){return <div className="empty"><Box size={28}/><h3>Nothing here yet</h3><p>{text}</p></div>}
-function Button({children,onClick,secondary=false,disabled=false}:{children:React.ReactNode,onClick?:()=>void,secondary?:boolean,disabled?:boolean}){return <button disabled={disabled} className={secondary?'button secondary':'button'} onClick={onClick}>{children}</button>}
-
-export default function Platform(){
- const path=usePathname().split('/')[1]||'dashboard';const router=useRouter();
- const [user,setUser]=useState<Row|null>(null),[data,setData]=useState<Record<string,Row[]>>({}),[loading,setLoading]=useState(true),[error,setError]=useState(''),[toast,setToast]=useState(''),[search,setSearch]=useState(''),[filter,setFilter]=useState('All statuses'),[page,setPage]=useState(1),[selected,setSelected]=useState<Row|null>(null),[modal,setModal]=useState(''),[busy,setBusy]=useState(false),[result,setResult]=useState<Row|null>(null),[serial,setSerial]=useState('PT-2026-000003'),[location,setLocation]=useState('Hyderabad'),[message,setMessage]=useState(''),[qr,setQr]=useState(''),[mobile,setMobile]=useState(false),[authMode,setAuthMode]=useState('login'),[users,setUsers]=useState<Row[]>([]);
- const video=useRef<HTMLVideoElement>(null),stream=useRef<MediaStream|null>(null),[scanning,setScanning]=useState(false);
- const notify=(s:string)=>{setToast(s);setTimeout(()=>setToast(''),5000)};
- async function load(){try{const d=await api('data');setData(d);setError('')}catch(e){setError((e as Error).message)}finally{setLoading(false)}}
- useEffect(()=>{api('auth/me').then(u=>{setUser(u);load()}).catch(()=>setLoading(false))},[]);
- useEffect(()=>{setSearch('');setFilter('All statuses');setPage(1);setSelected(null);setResult(null);setModal('')},[path]);
- useEffect(()=>{if(path==='users'&&user)api('users').then(setUsers).catch(e=>setError(e.message))},[path,user]);
- useEffect(()=>{return ()=>{stream.current?.getTracks().forEach(t=>t.stop())}},[]);
- async function action(fn:()=>Promise<unknown>,success='Changes saved'){setBusy(true);try{await fn();await load();notify(success)}catch(e){notify((e as Error).message)}finally{setBusy(false)}}
- async function login(body?:Row,demo=false){setBusy(true);setError('');try{const r=await api('auth/'+(demo?'demo':authMode),body||{});setUser(r.user);await load();router.push('/dashboard')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- async function verify(){setBusy(true);try{const r=await api('verification/verify',{serial,location});setResult(r);await load()}catch(e){notify((e as Error).message)}finally{setBusy(false)}}
- async function makeQr(s:string){setQr(await QRCode.toDataURL('PHARMATRACE:'+s,{width:300,margin:2,color:{dark:'#102a43',light:'#ffffff'}}));setSerial(s);setModal('qr')}
- async function scan(){try{if(!('BarcodeDetector' in window)){notify('Camera scanning is unavailable in this browser. Enter the serial or QR payload manually.');return}setScanning(true);stream.current=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});setTimeout(async()=>{if(!video.current)return;video.current.srcObject=stream.current;await video.current.play();const detector=new (window as any).BarcodeDetector({formats:['qr_code']});const timer=setInterval(async()=>{if(!video.current||!stream.current?.active){clearInterval(timer);return}try{const codes=await detector.detect(video.current);if(codes[0]){setSerial(codes[0].rawValue);stream.current?.getTracks().forEach(t=>t.stop());setScanning(false);clearInterval(timer)}}catch{clearInterval(timer);stream.current?.getTracks().forEach(t=>t.stop());setScanning(false)}},800)},150)}catch{setScanning(false);notify('Camera access unavailable. Use manual serial entry.')}}
- async function report(kind:string,format:string){setBusy(true);try{const r=await fetch('/api/reports/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,format,search})});if(!r.ok)throw new Error('Report generation failed');const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download=`pharmatrace-${kind}.${format}`;a.click();URL.revokeObjectURL(url);await load();notify('Report exported')}catch(e){notify((e as Error).message)}finally{setBusy(false)}}
- const metrics=useMemo(()=>{const v=data.verifications||[],s=data.shipments||[],b=data.batches||[];return {products:(data.serials||[]).length,batches:b.length,shipments:s.filter(r=>r.status!=='Delivered').length,verified:v.filter(r=>r.status==='Verified').length,suspicious:v.filter(r=>r.risk>=30).length,alerts:(data.alerts||[]).filter(r=>r.status!=='Resolved').length,expired:b.filter(r=>r.expiry<new Date().toISOString().slice(0,10)).length,investigations:(data.investigations||[]).filter(r=>r.status!=='Resolved').length,excursions:(data.temperatures||[]).filter(t=>{const sh=s.find(r=>r.id===t.shipment_id);return sh&&(t.temperature<sh.min_temp||t.temperature>sh.max_temp)}).length}},[data]);
- const trend=useMemo(()=>{const grouped:Record<string,Row>={};for(const v of data.verifications||[]){const day=v.created_at.slice(0,10);grouped[day]||={date:day,verified:0,flagged:0};grouped[day][v.risk>=30?'flagged':'verified']++}return Object.values(grouped).sort((a,b)=>a.date.localeCompare(b.date))},[data]);
- const distribution=[{name:'Verified',value:metrics.verified,color:'#16a394'},{name:'Flagged for review',value:metrics.suspicious,color:'#f4b04a'},{name:'Unverified',value:Math.max(0,metrics.products-new Set((data.verifications||[]).map(r=>r.serial)).size),color:'#dce5ef'}];
- const title=navigation.find(n=>n[0]===path)?.[1]||'Overview';
- const source=path==='verification'?data.verifications:path==='batches'?data.batches:path==='shipments'||path==='supply-chain'||path==='cold-chain'?data.shipments:path==='manufacturers'||path==='distributors'||path==='pharmacies'?(data.organizations||[]).filter(r=>path==='manufacturers'?r.type==='Manufacturer':path==='distributors'?['Distributor','Warehouse'].includes(r.type):['Pharmacy','Hospital'].includes(r.type)):path==='investigations'?data.investigations:path==='alerts'?data.alerts:path==='audit'?data.audit:path==='inventory'?data.inventory:path==='users'?users:path==='counterfeit-detection'?(data.verifications||[]).filter(r=>r.risk>=30):path==='traceability'?data.serials:data.products;
- const rows=(source||[]).filter(r=>JSON.stringify(r).toLowerCase().includes(search.toLowerCase())&&(filter==='All statuses'||r.status===filter));
- const statuses=Array.from(new Set((source||[]).map(r=>r.status).filter(Boolean)));
- const pageRows=rows.slice((page-1)*8,page*8);
- const formFields:Record<string,[string,string,string][]>= {product:[['name','Product name','text'],['manufacturer','Manufacturer','text'],['category','Category','text'],['min_temp','Minimum temperature (°C)','number'],['max_temp','Maximum temperature (°C)','number'],['barcode','Barcode','text']],batch:[['batch_number','Batch number','text'],['product_id','Product','product'],['manufactured','Manufacturing date','date'],['expiry','Expiry date','date'],['quantity','Quantity','number']],shipment:[['batch_id','Batch','batch'],['origin','Origin','text'],['destination','Destination','text'],['quantity','Quantity','number'],['expected_delivery','Expected delivery','date']],investigation:[['title','Investigation title','text'],['serial','Serial number','text']]};
- async function submitForm(event:React.FormEvent<HTMLFormElement>){event.preventDefault();const f=new FormData(event.currentTarget),body:Row=Object.fromEntries(f);for(const key of ['min_temp','max_temp','quantity'])if(key in body)body[key]=Number(body[key]);await action(async()=>{await api(modal==='product'?'products':modal==='batch'?'batches':modal==='shipment'?'shipments':'investigations',body);setModal('')},'Record created and added to the audit trail')}
-
- if(loading&&!user)return <div className="loading"><ShieldCheck size={42}/><h2>PharmaTrace AI</h2><p>Connecting your supply chain workspace…</p></div>;
- if(!user)return <div className="auth-page"><div className="auth-story"><div className="brand"><div className="brand-icon"><ShieldCheck/></div>PharmaTrace <b>AI</b></div><div><div className="eyebrow light">CONFIDENCE AT EVERY HANDOFF</div><h1>Every medicine.<br/>Every movement.<br/><span>Accounted for.</span></h1><p>Connected traceability and explainable intelligence for a safer pharmaceutical supply chain.</p><div className="auth-stats"><div><GitBranch/><b>Full journey</b><small>End-to-end traceability</small></div><div><Sparkles/><b>10 specialists</b><small>One coordinated workflow</small></div></div></div><small>Synthetic demonstration · Human decisions always remain in control</small></div><div className="auth-form"><span className="badge green">WORKSPACE ACCESS</span><h2>{authMode==='register'?'Create your account':'Welcome to PharmaTrace'}</h2><p>Sign in to your pharmaceutical intelligence workspace.</p><form onSubmit={e=>{e.preventDefault();login(Object.fromEntries(new FormData(e.currentTarget)))}}>{authMode==='register'&&<label>Full name<input name="name" required placeholder="Your full name"/></label>}<label>Work email<input name="email" type="email" required placeholder="you@organization.com"/></label><label>Password<input name="password" type="password" minLength={8} required placeholder="At least 8 characters"/></label>{error&&<div className="error">{error}</div>}<button className="button full" disabled={busy}>{busy?'Connecting…':authMode==='register'?'Create account':'Sign in'}<ArrowRight size={17}/></button></form><div className="divider">or explore the platform</div><Button secondary disabled={busy} onClick={()=>login(undefined,true)}><FlaskConical size={17}/>Open synthetic demo<ArrowUpRight size={16}/></Button><p className="small">{authMode==='login'?'New to PharmaTrace?':'Already registered?'} <button className="text-button" onClick={()=>setAuthMode(authMode==='login'?'register':'login')}>{authMode==='login'?'Create account':'Sign in'}</button></p><div className="demo-note"><Shield size={18}/><span>Demo data is synthetic. Risk signals are recommendations for investigation, not confirmed counterfeit findings.</span></div></div></div>;
-
- function table(columns:[string,string][],records=pageRows){return <div className="table-wrap"><table><thead><tr>{columns.map(([key,label])=><th key={key}>{label}</th>)}<th aria-label="Open record"/></tr></thead><tbody>{records.map(r=><tr key={r.id} onClick={()=>setSelected(r)} tabIndex={0} onKeyDown={e=>e.key==='Enter'&&setSelected(r)}>{columns.map(([key])=><td key={key}>{key==='status'||key==='priority'?<Badge value={r[key]}/>:key==='risk'?<span className={'risk-number '+(r.risk>=60?'danger':'')}>{r.risk}<small>/100</small></span>:key==='created_at'?new Date(r[key]).toLocaleDateString('en-IN'):String(r[key]??'—')}</td>)}<td><ChevronRight size={16}/></td></tr>)}</tbody></table>{!records.length&&<Empty/>}</div>}
- function tablePanel(columns:[string,string][]){return <section className="panel"><div className="table-toolbar"><div className="search-box"><Search size={16}/><input aria-label="Search records" placeholder="Search records…" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}}/></div><select aria-label="Filter status" value={filter} onChange={e=>{setFilter(e.target.value);setPage(1)}}><option>All statuses</option>{statuses.map(s=><option key={s}>{s}</option>)}</select><span className="muted small">{rows.length} records</span></div>{table(columns)}<div className="pagination"><span>Showing {rows.length?Math.min((page-1)*8+1,rows.length):0}–{Math.min(page*8,rows.length)} of {rows.length}</span><div><button disabled={page===1} onClick={()=>setPage(page-1)} aria-label="Previous page"><ChevronLeft size={16}/></button><span>{page}</span><button disabled={page*8>=rows.length} onClick={()=>setPage(page+1)} aria-label="Next page"><ChevronRight size={16}/></button></div></div></section>}
- function resultPanel(r:Row){return <section className="panel result"><div className="section-heading"><div><div className="eyebrow">EVIDENCE-LED ASSESSMENT</div><h2>{r.product?.product||r.serial}</h2></div><Badge value={r.status}/></div><div className="result-score"><div className={'score '+(r.risk>=60?'danger':'')}>{r.risk}<small>/ 100</small></div><div><h3>{r.risk>=80?'Critical':r.risk>=60?'High':r.risk>=30?'Medium':'Low'} demonstration risk</h3><p>Confidence reflects evidence coverage, not probability of counterfeit.</p><small>{r.evidence?.filter((e:Row)=>e.passed).length} checks passed · {r.history?.length} agent steps</small></div></div><p>{r.explanation}</p><div className="evidence-list">{r.evidence?.map((e:Row,i:number)=><div key={i}>{e.passed?<CheckCircle2 className="teal" size={18}/>:<AlertTriangle className="warning" size={18}/>}<div><b>{e.check}</b><p>{e.detail}</p></div>{!e.passed&&<span className="weight">+{e.weight}</span>}</div>)}</div><div className="recommendation"><Shield size={20}/><div><b>Recommended next step</b><p>{r.recommendation}</p></div></div><small className="muted">Configurable demo thresholds: Low 0–29 · Medium 30–59 · High 60–79 · Critical 80–100. No laboratory confirmation.</small></section>}
-
- return <div className="app-shell"><aside className={'sidebar '+(mobile?'open':'')}><Link className="brand" href="/dashboard"><div className="brand-icon"><ShieldCheck size={25}/></div><span>PharmaTrace <b>AI</b></span></Link><div className="workspace"><div className="workspace-icon"><Building2 size={18}/></div><div><b>PharmaTrace Network</b><small>Enterprise workspace</small></div><ChevronDown size={14}/></div><div className="nav-label">WORKSPACE</div><nav>{navigation.map(([href,label,Icon],i)=><div key={href}>{i===11&&<div className="nav-label intelligence">INTELLIGENCE & GOVERNANCE</div>}<Link href={'/'+href} onClick={()=>setMobile(false)} className={path===href?'nav-link active':'nav-link'}><Icon size={18}/><span>{label}</span>{href==='alerts'&&metrics.alerts>0&&<em>{metrics.alerts}</em>}{href==='agents'&&<span className="live-dot"/>}</Link></div>)}</nav><div className="sidebar-footer"><div className="system-status"><span className="live-dot"/>Evidence engine online</div><div className="user"><div className="avatar">{user.name.slice(0,2).toUpperCase()}</div><div><b>{user.name}</b><small>{user.role}</small></div><button aria-label="Log out" onClick={()=>action(async()=>{await api('auth/logout',{});setUser(null)},'Signed out')}><LogOut size={17}/></button></div></div></aside><div className="main-shell"><header className="topbar"><button className="mobile-menu" onClick={()=>setMobile(!mobile)} aria-label="Toggle navigation"><Menu/></button><div className="breadcrumb">Workspace <ChevronRight size={13}/><b>{title}</b></div><div className="topbar-right"><div className="global-search"><Search size={16}/><input aria-label="Global search" placeholder="Search serials, batches, shipments…" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}}/><kbd>⌘ K</kbd></div><Link href="/alerts" className="notification" aria-label="Notifications"><Bell size={20}/><i/></Link><div className="top-avatar">{user.name[0]}</div></div></header><main><div className="demo-banner"><FlaskConical size={15}/><span><b>Demonstration workspace</b> · Synthetic data. Evidence rules + LangGraph. Human review required for consequential actions.</span><span className="demo-pill">DEMO</span></div><div className="page-heading"><div><div className="eyebrow">PHARMACEUTICAL INTELLIGENCE</div><h1>{title}{path==='dashboard'&&<span className="live-tag"><span className="live-dot"/> Live workspace</span>}</h1><p>{descriptions[path]||'Manage your connected pharmaceutical operations with a complete audit trail.'}</p></div><div className="heading-actions">{path==='dashboard'||path==='analytics'?<><Button secondary onClick={()=>report('verifications','csv')}><Download size={16}/>Export report</Button><Button onClick={()=>router.push('/verification')}><ScanLine size={17}/>Verify medicine</Button></>:['batches','shipments','investigations','manufacturers'].includes(path)?<Button onClick={()=>setModal(path==='batches'?'batch':path==='shipments'?'shipment':path==='manufacturers'?'product':'investigation')}><Plus size={17}/>{path==='batches'?'Create batch':path==='shipments'?'Create shipment':path==='manufacturers'?'Register product':'Open investigation'}</Button>:null}</div></div>{error&&<div className="error">{error}<button onClick={load}>Retry</button></div>}
-
- {(path==='dashboard'||path==='analytics')&&<><div className="stats-grid">{[[Package,'Serialized medicines',metrics.products,'Across '+metrics.batches+' registered batches','teal'],[ShieldCheck,'Verified medicines',metrics.verified,'Matched application records','blue'],[Truck,'Active shipments',metrics.shipments,'Across the distribution network','purple'],[ShieldAlert,'Open risk alerts',metrics.alerts,'Require attention and review','orange']].map(([Icon,label,value,note,color]:any)=><div className="stat-card" key={label}><div className="stat-top"><span>{label}</span><div className={'stat-icon '+color}><Icon size={20}/></div></div><div className="stat-value">{value.toLocaleString()}<span className={'stat-indicator '+color}>{color==='orange'?<AlertTriangle size={15}/>:<ArrowUpRight size={15}/>}</span></div><p>{note}</p></div>)}</div><div className="dashboard-grid"><section className="panel chart-panel"><div className="section-heading"><div><h2>Verification activity</h2><p>Registered checks and signals requiring review</p></div><span className="subtle-label">Recorded activity</span></div><div className="chart-legend"><span><i style={{background:'#13a99b'}}/>Verified</span><span><i style={{background:'#edac48'}}/>Flagged for review</span></div><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend}><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#14ac9b" stopOpacity={.2}/><stop offset="100%" stopColor="#14ac9b" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 5" vertical={false} stroke="#edf0f4"/><XAxis dataKey="date" tick={{fontSize:11}} tickLine={false} axisLine={false}/><YAxis tick={{fontSize:11}} tickLine={false} axisLine={false} allowDecimals={false}/><Tooltip/><Area type="monotone" dataKey="verified" stroke="#13a99b" strokeWidth={3} fill="url(#area)"/><Area type="monotone" dataKey="flagged" stroke="#edac48" strokeWidth={2} fill="transparent"/></AreaChart></ResponsiveContainer></div></section><section className="panel authenticity"><div className="section-heading"><div><h2>Authenticity overview</h2><p>Serialized product coverage</p></div><ShieldCheck size={20} className="muted"/></div><div className="donut"><ResponsiveContainer width="100%" height={195}><PieChart><Pie data={distribution} dataKey="value" innerRadius={65} outerRadius={85} paddingAngle={3} stroke="none">{distribution.map(d=><Cell key={d.name} fill={d.color}/>)}</Pie><Tooltip/></PieChart></ResponsiveContainer><div className="donut-label"><b>{metrics.products}</b><small>serialized units</small></div></div><div className="distribution">{distribution.map(d=><div key={d.name}><span><i style={{background:d.color}}/>{d.name}</span><b>{d.value}</b></div>)}</div></section></div><div className="mini-metrics">{[['Active investigations',metrics.investigations,ClipboardList],['Expired batches',metrics.expired,Clock],['Temperature excursions',metrics.excursions,Thermometer],['Verification checks',(data.verifications||[]).length,ScanLine]].map(([label,value,Icon]:any)=><Link key={label} href={label==='Active investigations'?'/investigations':label==='Expired batches'?'/batches':label==='Temperature excursions'?'/cold-chain':'/verification'}><Icon size={19}/><span>{label}</span><b>{value}</b><ChevronRight size={16}/></Link>)}</div><div className="dashboard-grid lower"><section className="panel"><div className="section-heading"><div><h2>Recent verifications</h2><p>Latest medicine authentication results</p></div><Link className="text-link" href="/verification">View all <ArrowRight size={14}/></Link></div>{table([['serial','SERIAL NUMBER'],['product','PRODUCT'],['status','STATUS'],['risk','RISK SCORE']],(data.verifications||[]).filter(r=>JSON.stringify(r).toLowerCase().includes(search.toLowerCase())).slice(0,5))}</section><section className="panel alerts-panel"><div className="section-heading"><div><h2>Priority signals</h2><p>Attention where it matters</p></div><span className="count">{metrics.alerts}</span></div>{(data.alerts||[]).filter(a=>a.status!=='Resolved').slice(0,3).map(a=><button className="alert-item" key={a.id} onClick={()=>{router.push('/alerts')}}><div className={'alert-icon '+(a.priority==='Critical'?'red':'amber')}><AlertTriangle size={18}/></div><div><b>{a.title}</b><span>{a.category} · {a.priority} priority</span></div><ChevronRight size={16}/></button>)}<Link className="panel-footer-link" href="/alerts">Review all alerts <ArrowRight size={14}/></Link></section></div><section className="intelligence-banner"><div className="ai-orb"><Sparkles size={25}/></div><div><div className="eyebrow">YOUR CONNECTED INTELLIGENCE LAYER</div><h2>Ten specialists. One clear picture.</h2><p>Run an evidence-led workflow across traceability, batch verification, shipment monitoring, and risk.</p></div><Button onClick={()=>router.push('/agents')}>Open agent center <ArrowRight size={16}/></Button></section>{path==='analytics'&&<section className="panel chart-panel"><div className="section-heading"><h2>Shipment status distribution</h2></div><div className="chart"><ResponsiveContainer><BarChart data={['Dispatched','In transit','Delayed','Delivered'].map(status=>({name:status,count:(data.shipments||[]).filter(s=>s.status===status).length}))}><CartesianGrid vertical={false} strokeDasharray="4 4"/><XAxis dataKey="name"/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="count" fill="#148f91" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></section>}</>}
-
- {(path==='verification'||path==='counterfeit-detection')&&<><div className="verification-grid"><section className="panel verify-form"><div className="section-heading"><div><h2>Authenticate a medicine</h2><p>Scan a PharmaTrace QR code or enter its serial.</p></div><ScanLine className="teal"/></div><div className="scan-zone"><div className="scan-frame"><ScanLine size={48}/></div><h3>One scan. Connected evidence.</h3><p>Synthetic serialization credentials</p><Button secondary onClick={scan}><Camera size={16}/>Scan QR code</Button>{scanning&&<><video ref={video} playsInline muted/><button onClick={()=>{stream.current?.getTracks().forEach(t=>t.stop());setScanning(false)}}>Stop camera</button></>}</div><label>Serial number or QR payload<input value={serial} onChange={e=>setSerial(e.target.value)} placeholder="PT-2026-000003"/></label><label>Verification location<input value={location} onChange={e=>setLocation(e.target.value)} placeholder="City or facility"/></label><Button disabled={busy} onClick={verify}>{busy?<RefreshCw className="spin" size={16}/>:<ShieldCheck size={17}/>}Verify against registry<ArrowRight size={16}/></Button><div className="sample-links"><small>Try a scenario</small><button onClick={()=>setSerial('PT-2026-000001')}>Registered</button><button onClick={()=>setSerial('PT-2026-000003')}>Cold chain</button><button onClick={()=>setSerial('PT-2026-000005')}>Expired</button><button onClick={()=>setSerial('PT-UNKNOWN-001')}>Unknown</button></div></section>{result?resultPanel(result):<section className="panel result-placeholder"><div className="shield-illustration"><ShieldCheck size={64}/></div><h2>Trust begins with evidence</h2><p>Run a verification to review matched records, custody history, temperature evidence, and an explainable risk assessment.</p><div className="check-chips"><span><Check size={14}/>Registry match</span><span><Check size={14}/>Batch & expiry</span><span><Check size={14}/>Cold chain</span><span><Check size={14}/>Human oversight</span></div></section>}</div><div className="section-heading"><h2>{path==='counterfeit-detection'?'Flagged assessments':'Verification history'}</h2><Button secondary onClick={()=>report('verifications','csv')}><Download size={15}/>Export</Button></div>{tablePanel([['serial','SERIAL'],['product','PRODUCT'],['status','ASSESSMENT'],['risk','RISK'],['created_at','RECORDED']])}</>}
-
- {path==='batches'&&<>{tablePanel([['batch_number','BATCH NUMBER'],['product','PRODUCT'],['manufacturer','MANUFACTURER'],['quantity','QUANTITY'],['expiry','EXPIRY'],['status','STATUS']])}<div className="section-heading products-heading"><h2>Product registry</h2><Button secondary onClick={()=>setModal('product')}><Plus size={16}/>Register product</Button></div>{table([['name','PRODUCT'],['manufacturer','MANUFACTURER'],['category','CATEGORY'],['status','STATUS']],(data.products||[]).filter(r=>JSON.stringify(r).toLowerCase().includes(search.toLowerCase())))}</>}
- {path==='traceability'&&<>{tablePanel([['serial','SERIAL NUMBER'],['product','PRODUCT'],['status','STATUS']])}<div className="info-note"><GitBranch size={18}/>Select a serialized medicine to explore its append-only custody timeline and generate its QR code.</div></>}
- {['manufacturers','distributors','pharmacies'].includes(path)&&tablePanel([['name','ORGANIZATION'],['type','PARTICIPANT TYPE'],['location','LOCATION'],['contact','CONTACT'],['status','REGISTRY STATUS']])}
- {path==='inventory'&&tablePanel([['product','PRODUCT'],['location','LOCATION'],['quantity','QUANTITY'],['status','STATUS']])}
- {path==='shipments'&&tablePanel([['reference','SHIPMENT'],['product','PRODUCT'],['origin','ORIGIN'],['destination','DESTINATION'],['expected_delivery','EXPECTED DELIVERY'],['status','STATUS']])}
- {(path==='supply-chain'||path==='cold-chain')&&<><section className="panel network-panel"><div className="section-heading"><div><h2>{path==='supply-chain'?'Connected distribution network':'Temperature monitoring'}</h2><p>{path==='supply-chain'?'Synthetic locations · Select a route to inspect its records':'Readings are compared against each shipment’s product limits'}</p></div><Badge value="Synthetic data"/></div>{path==='supply-chain'?<div className="network-grid">{(data.shipments||[]).filter(r=>JSON.stringify(r).toLowerCase().includes(search.toLowerCase())).slice(0,12).map((s,i)=><button key={s.id} className={'route-card '+(s.route_deviation?'route-risk':'')} onClick={()=>setSelected(s)}><div><MapPin size={18}/><b>{s.origin}</b><span className="route-line"><Truck size={17}/></span><b>{s.destination}</b></div><footer><small>{s.reference}</small><Badge value={s.route_deviation?'Route anomaly':s.status}/></footer></button>)}</div>:<><div className="chart"><ResponsiveContainer><LineChart data={(data.temperatures||[]).filter(t=>t.shipment_id===(selected?.id||data.shipments?.[2]?.id)).sort((a,b)=>a.timestamp.localeCompare(b.timestamp)).map(t=>({...t,time:new Date(t.timestamp).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}))}><CartesianGrid strokeDasharray="3 4"/><XAxis dataKey="time" tick={{fontSize:11}}/><YAxis unit="°C"/><Tooltip/><Line dataKey="temperature" stroke="#0fa89a" strokeWidth={3}/></LineChart></ResponsiveContainer></div><p className="small muted">Select a shipment below to inspect its temperature limits and evidence.</p></>}</section>{tablePanel([['reference','SHIPMENT'],['product','PRODUCT'],['min_temp','MIN °C'],['max_temp','MAX °C'],['status','STATUS']])}</>}
-
- {path==='agents'&&<><section className="agent-intro"><div><span className="badge blue"><Sparkles size={13}/>LANGGRAPH WORKFLOW</span><h2>Ask your supply chain.</h2><p>Specialist agents retrieve records, share evidence, and explain the signals.</p></div><div className="workflow-strip">{['Request','Orchestrate','Verify','Assess risk','Human review'].map((s,i)=><span key={s}>{i>0&&<ArrowRight size={15}/>}<b>{s}</b></span>)}</div><form onSubmit={e=>{e.preventDefault();action(async()=>{const r=await api('agents/run',{serial,message});setResult(r)},'Workflow completed')}}><Sparkles size={20}/><input aria-label="Ask agent" value={message} onChange={e=>setMessage(e.target.value)} placeholder="Investigate PT-2026-000003 or check its cold chain…"/><button className="button" disabled={busy}><Send size={17}/>{busy?'Running…':'Run workflow'}</button></form><div className="prompt-chips">{['Verify PT-2026-000001','Check cold chain PT-2026-000003','Explain risk PT-2026-000008'].map(p=><button key={p} onClick={()=>setMessage(p)}>{p}<ArrowUpRight size={13}/></button>)}</div></section><div className="agent-grid">{['Orchestrator','Traceability','Batch Verification','Counterfeit Detection','Shipment Monitoring','Cold Chain Monitoring','Risk Assessment','Investigation','Compliance & Policy','Report Generation'].map((name,i)=>{const runs=(data.executions||[]).flatMap(e=>e.history||[]).filter(h=>h.agent===name);return <section className="panel agent-card" key={name}><div className="agent-card-top"><div className={'agent-icon tone-'+i%4}><Sparkles size={22}/></div><span className="badge green"><span className="live-dot"/>Ready</span></div><h3>{name}</h3><p>{['Routes tasks and coordinates shared evidence.','Retrieves custody stages and detects gaps.','Checks expiry, dates, and manufacturer records.','Checks identifier usage and suspicious patterns.','Identifies route anomalies and delivery delays.','Compares readings to product storage limits.','Combines weighted, explainable findings.','Prepares evidence for authorized review.','Retrieves internal handling requirements.','Produces evidence-based investigation summaries.'][i]}</p><div className="agent-stats"><span><b>{runs.filter(r=>r.status==='Completed').length}</b> completed</span><span><b>{runs.filter(r=>r.status==='Failed').length}</b> failed</span><span><b>{runs.length?Math.round(runs.reduce((a,r)=>a+r.duration_ms,0)/runs.length):0}</b> ms avg.</span></div></section>})}</div>{result&&resultPanel(result)}<section className="panel"><div className="section-heading"><h2>Execution history</h2><span className="muted small">Recorded workflow runs</span></div>{table([['serial','SERIAL'],['task','TASK'],['status','RESULT'],['risk','RISK'],['created_at','EXECUTED']],data.executions||[])}</section></>}
-
- {path==='investigations'&&tablePanel([['title','INVESTIGATION'],['serial','SERIAL'],['assigned_to','ASSIGNEE'],['risk','RISK'],['status','STATUS']])}
- {path==='alerts'&&tablePanel([['title','SIGNAL'],['category','CATEGORY'],['priority','PRIORITY'],['status','STATUS'],['created_at','DETECTED']])}
- {path==='audit'&&tablePanel([['actor','ACTOR'],['action','ACTION'],['entity','ENTITY'],['detail','DETAIL'],['created_at','RECORDED']])}
- {path==='reports'&&<><div className="report-grid">{[['Traceability','events',GitBranch],['Medicine verification','verifications',ShieldCheck],['Batch analysis','batches',Package],['Shipment & cold chain','shipments',Truck],['Investigation findings','investigations',ClipboardList],['Compliance audit','audit',Shield],['Inventory','inventory',Box],['Risk signals','alerts',Bell]].map(([name,kind,Icon]:any)=><section className="panel report-card" key={kind}><Icon size={26} className="teal"/><h3>{name}</h3><p>Export scoped records with organization, generation date, and evidence context.</p><div><Button secondary disabled={busy} onClick={()=>report(kind,'csv')}><Download size={15}/>CSV</Button><Button secondary disabled={busy} onClick={()=>report(kind,'pdf')}><FileText size={15}/>PDF</Button></div></section>)}</div><section className="panel"><div className="section-heading"><h2>Generated reports</h2></div>{table([['name','REPORT'],['format','FORMAT'],['records','RECORDS'],['generated_by','GENERATED BY'],['created_at','DATE']],data.reports||[])}</section></>}
- {path==='users'&&<section className="panel"><div className="section-heading"><h2>Organization members</h2><Badge value="Server-enforced roles"/></div>{table([['name','NAME'],['email','EMAIL'],['role','ROLE']],users)}<p className="panel-padding small muted">New registrations receive the Pharmacist role. Administrators can change other organization members’ roles from the member detail view.</p></section>}
- {path==='settings'&&<div className="settings-grid"><section className="panel panel-padding"><h2>Workspace configuration</h2><label>Organization<input readOnly value={user.org}/></label><label>Signed-in account<input readOnly value={user.email}/></label><label>Current role<input readOnly value={user.role}/></label><div className="info-note"><ShieldCheck size={20}/>Permissions are verified by the API on every protected operation.</div></section><section className="panel panel-padding"><h2>Evidence and safety policies</h2><div className="settings-row"><span>Agent runtime</span><b>LangGraph</b></div><div className="settings-row"><span>Risk engine</span><b>Explainable rules</b></div><div className="settings-row"><span>Data source</span><Badge value="Synthetic demonstration"/></div><div className="settings-row"><span>Human approvals</span><Badge value="Required"/></div><p>Hosted demo storage may reset when the serverless instance restarts. Configure PostgreSQL and Supabase Auth for durable production operation.</p><p>No assessment confirms counterfeit status or replaces regulatory review.</p></section></div>}
- <footer className="main-footer"><span>PharmaTrace AI <span>·</span> Connected evidence. Safer supply chains.</span><span><span className="live-dot"/>Synthetic demonstration</span></footer></main></div>
-
- {selected&&<div className="drawer-backdrop" onClick={()=>setSelected(null)}><aside className="drawer" onClick={e=>e.stopPropagation()}><div className="drawer-heading"><div><div className="eyebrow">RECORD DETAILS</div><h2>{selected.reference||selected.serial||selected.batch_number||selected.title||selected.name||'Record'}</h2></div><button onClick={()=>setSelected(null)} aria-label="Close details"><X/></button></div><Badge value={selected.status||selected.role||'Recorded'}/><div className="detail-fields">{Object.entries(selected).filter(([k,v])=>!Array.isArray(v)&&typeof v!=='object'&&!['id','created_at','content_base64'].includes(k)).map(([k,v])=><div key={k}><span>{k.replaceAll('_',' ')}</span><b>{String(v)}</b></div>)}</div>{selected.serial&&<><div className="drawer-actions"><Button secondary onClick={()=>makeQr(selected.serial)}><ScanLine size={16}/>Generate QR</Button><Button onClick={()=>{setSerial(selected.serial);setSelected(null);router.push('/verification')}}><ShieldCheck size={16}/>Verify</Button></div><h3>Chain of custody</h3><div className="timeline">{(data.events||[]).filter(e=>e.serial===selected.serial).sort((a,b)=>a.timestamp.localeCompare(b.timestamp)).map(e=><div key={e.id}><i/><b>{e.stage}</b><p>{e.organization} · {e.location}</p><small>{new Date(e.timestamp).toLocaleString('en-IN')}</small></div>)}</div></>}{selected.batch_number&&<Button onClick={()=>action(async()=>{const s=await api('batches/'+selected.id+'/serialize',{});setSelected(s);await makeQr(s.serial)},'Serialized medicine registered')}><Plus size={16}/>Serialize a unit</Button>}
- {selected.reference&&<><h3>Shipment operations</h3><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action(async()=>{await api('shipments/'+selected.id,{status:f.get('status'),reason:f.get('reason')},'PUT');setSelected(null)})}}><label>Status<select name="status" defaultValue={selected.status}>{['Dispatched','In transit','Delayed','Delivered'].map(s=><option key={s}>{s}</option>)}</select></label><label>Handling note<input name="reason"/></label><button className="button" disabled={busy}>Record milestone</button></form><form className="temperature-form" onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action(()=>api('shipments/'+selected.id+'/temperature',{temperature:Number(f.get('temperature'))}),'Temperature recorded')}}><label>Temperature reading (°C)<input name="temperature" type="number" step="0.1" required/></label><button className="button secondary" disabled={busy}>Record reading</button></form><h3>Temperature history</h3><p className="muted small">Registered limits: {selected.min_temp}–{selected.max_temp} °C</p>{(data.temperatures||[]).filter(t=>t.shipment_id===selected.id).map(t=><div key={t.id} className="settings-row"><span>{new Date(t.timestamp).toLocaleTimeString('en-IN')}</span><Badge value={t.temperature+' °C'}/></div>)}</>}
- {path==='investigations'&&<><h3>Investigation workflow</h3><form onSubmit={e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.currentTarget));action(async()=>{await api('investigations/'+selected.id,f,'PUT');setSelected(null)})}}><label>Status<select name="status" defaultValue={selected.status}>{['New','Under Investigation','Awaiting Approval','Resolved','Escalated'].map(s=><option key={s}>{s}</option>)}</select></label><label>Assigned investigator<input name="assigned_to" defaultValue={selected.assigned_to}/></label><label>Reason / resolution<textarea name="reason" minLength={10}/></label><button className="button" disabled={busy}>Update investigation</button></form><h3>Evidence and notes</h3>{selected.notes?.map((n:Row,i:number)=><div className="note" key={i}><p>{n.text}</p><small>{n.actor} · {n.timestamp}</small></div>)}<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action(async()=>{const r=await api('investigations/'+selected.id+'/notes',{text:f.get('text')});setSelected({...r,id:selected.id})})}}><label>Add note<textarea name="text" required minLength={3}/></label><button className="button secondary" disabled={busy}>Save note</button></form><label>Upload supporting evidence (TXT, CSV, PDF; max 1 MB)<input type="file" accept=".txt,.csv,.pdf" onChange={e=>{const file=e.target.files?.[0];if(file){const f=new FormData();f.append('file',file);action(()=>api('investigations/'+selected.id+'/evidence',f),'Evidence uploaded')}}}/></label><h3>Human approval</h3><p className="small muted">Decisions are recorded for review. No physical or regulated action is executed.</p>{selected.approvals?.map((a:Row,i:number)=><div className="note" key={i}><Badge value={a.decision}/><b> {a.action}</b><p>{a.reason}</p><small>{a.actor}</small></div>)}<form onSubmit={e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.currentTarget));action(async()=>{const r=await api('investigations/'+selected.id+'/approval',f);setSelected({...r,id:selected.id})},'Human decision recorded')}}><label>Proposed action<select name="action">{['quarantine','release','recall','destruction'].map(s=><option key={s}>{s}</option>)}</select></label><label>Decision<select name="decision"><option>approved</option><option>rejected</option></select></label><label>Documented reason<textarea name="reason" required minLength={10}/></label><button className="button" disabled={busy}>Record authorized decision</button></form></>}
- {path==='alerts'&&<div className="drawer-actions"><Button secondary onClick={()=>action(async()=>{await api('alerts/'+selected.id,{status:'Acknowledged'},'PUT');setSelected(null)})}>Acknowledge</Button><Button onClick={()=>{setModal('resolve')}}>Resolve with reason</Button></div>}
- {path==='users'&&selected.id!==user.id&&<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action(async()=>{await api('users/'+selected.id+'/role',{role:f.get('role')},'PUT');setUsers(await api('users'));setSelected(null)})}}><label>Role<select name="role" defaultValue={selected.role}>{['System Administrator','Manufacturer','Distributor','Warehouse Manager','Pharmacist','Hospital Administrator','Compliance Officer','Investigator'].map(r=><option key={r}>{r}</option>)}</select></label><button className="button">Save role</button></form>}
- {selected.evidence?.length>0&&<><h3>Recorded evidence</h3>{selected.evidence.map((e:Row,i:number)=><div key={i} className="note"><b>{e.check||e.filename}</b><p>{e.detail||e.sha256}</p></div>)}</>}</aside></div>}
- {modal&&<div className="modal-backdrop" onClick={()=>setModal('')}><section className="modal" onClick={e=>e.stopPropagation()}><div className="section-heading"><h2>{modal==='qr'?'Synthetic serialization QR':modal==='resolve'?'Resolve alert':'Create '+modal}</h2><button aria-label="Close dialog" onClick={()=>setModal('')}><X/></button></div>{modal==='qr'?<div className="qr-dialog"><img src={qr} alt={'QR for '+serial}/><b>{serial}</b><p>This QR is a synthetic application identifier, not an official pharmaceutical credential.</p><a className="button" href={qr} download={serial+'.png'}><Download size={16}/>Download QR</a></div>:modal==='resolve'?<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action(async()=>{await api('alerts/'+selected?.id,{status:'Resolved',reason:f.get('reason')},'PUT');setSelected(null);setModal('')})}}><label>Resolution reason<textarea name="reason" required minLength={10}/></label><button className="button">Resolve alert</button></form>:<form onSubmit={submitForm}>{(formFields[modal]||[]).map(([key,label,type])=><label key={key}>{label}{type==='product'||type==='batch'?<select name={key} required><option value="">Select {type}</option>{(type==='product'?data.products:data.batches)?.map(r=><option key={r.id} value={r.id}>{r.name||r.batch_number}</option>)}</select>:<input name={key} type={type} step={key.includes('temp')?'0.1':undefined} defaultValue={key==='min_temp'?15:key==='max_temp'?30:undefined} required={key!=='barcode'} min={key==='quantity'?1:undefined}/>}</label>)}<div className="modal-footer"><Button secondary onClick={()=>setModal('')}>Cancel</Button><button className="button" disabled={busy}>{busy?'Saving…':'Create record'}<ArrowRight size={16}/></button></div></form>}</section></div>}
- {toast&&<div className="toast" role="status"><CheckCircle2 size={19}/>{toast}<button onClick={()=>setToast('')} aria-label="Dismiss notification"><X size={16}/></button></div>}
- </div>
+const navigation: [string, string, any][] = [
+  ["dashboard", "Overview", LayoutDashboard],
+  ["supply-chain", "Supply chain map", Globe2],
+  ["traceability", "Drug traceability", GitBranch],
+  ["verification", "Drug authentication", ScanLine],
+  ["counterfeit-detection", "Counterfeit detection", ShieldAlert],
+  ["batches", "Batch management", Package],
+  ["manufacturers", "Manufacturers", Building2],
+  ["distributors", "Distributors", Truck],
+  ["pharmacies", "Pharmacies & hospitals", Users],
+  ["shipments", "Shipment monitoring", Truck],
+  ["cold-chain", "Cold chain monitoring", Thermometer],
+  ["agents", "AI agent center", Sparkles],
+  ["investigations", "Investigation center", ClipboardList],
+  ["analytics", "Risk analytics", Activity],
+  ["alerts", "Alerts & notifications", Bell],
+  ["audit", "Audit logs", ShieldCheck],
+  ["reports", "Reports", FileText],
+  ["inventory", "Inventory", Box],
+  ["users", "User management", Users],
+  ["settings", "Settings", Settings],
+];
+const descriptions: Record<string, string> = {
+  dashboard: "A clear view of every medicine, movement, and risk.",
+  verification: "Verify serialized medicines against registered evidence.",
+  traceability: "Follow the complete chain of custody, from origin to receipt.",
+  agents: "Coordinated intelligence. Transparent evidence. Human oversight.",
+  investigations: "Turn suspicious signals into documented decisions.",
+  analytics: "Understand the signals across your pharmaceutical network.",
+  shipments: "Monitor movement and keep every delivery accountable.",
+  "cold-chain": "Product-specific temperature intelligence for every shipment.",
+  "supply-chain": "Your connected pharmaceutical network, in one view.",
+};
+function Badge({ value }: { value: any }) {
+  const text = String(value ?? "Unknown");
+  const lower = text.toLowerCase();
+  return (
+    <span
+      className={
+        "badge " +
+        (/verified|delivered|registered|passed|completed|active|resolved|available|approved/.test(
+          lower,
+        ) && !lower.includes("unverified")
+          ? "green"
+          : /critical|expired|counterfeit|quarantined|failed|rejected/.test(
+                lower,
+              )
+            ? "red"
+            : /high|suspicious|delayed|duplicate|open|awaiting/.test(lower)
+              ? "amber"
+              : "blue")
+      }
+    >
+      {text}
+    </span>
+  );
+}
+function Empty({ text = "No records match your filters." }: { text?: string }) {
+  return (
+    <div className="empty">
+      <Box size={28} />
+      <h3>Nothing here yet</h3>
+      <p>{text}</p>
+    </div>
+  );
+}
+function Button({
+  children,
+  onClick,
+  secondary = false,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  secondary?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      disabled={disabled}
+      className={secondary ? "button secondary" : "button"}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
 }
 
+export default function Platform() {
+  const path = usePathname().split("/")[1] || "dashboard";
+  const router = useRouter();
+  const [user, setUser] = useState<Row | null>(null),
+    [data, setData] = useState<Record<string, Row[]>>({}),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(""),
+    [toast, setToast] = useState(""),
+    [search, setSearch] = useState(""),
+    [filter, setFilter] = useState("All statuses"),
+    [page, setPage] = useState(1),
+    [selected, setSelected] = useState<Row | null>(null),
+    [modal, setModal] = useState(""),
+    [busy, setBusy] = useState(false),
+    [result, setResult] = useState<Row | null>(null),
+    [serial, setSerial] = useState("PT-2026-000003"),
+    [location, setLocation] = useState("Hyderabad"),
+    [message, setMessage] = useState(""),
+    [qr, setQr] = useState(""),
+    [mobile, setMobile] = useState(false),
+    [authMode, setAuthMode] = useState("login"),
+    [users, setUsers] = useState<Row[]>([]);
+  const video = useRef<HTMLVideoElement>(null),
+    stream = useRef<MediaStream | null>(null),
+    [scanning, setScanning] = useState(false);
+  const notify = (s: string) => {
+    setToast(s);
+    setTimeout(() => setToast(""), 5000);
+  };
+  async function load() {
+    try {
+      const d = await api("data");
+      setData(d);
+      setError("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    api("auth/me")
+      .then((u) => {
+        setUser(u);
+        load();
+      })
+      .catch(() => setLoading(false));
+  }, []);
+  useEffect(() => {
+    setSearch("");
+    setFilter("All statuses");
+    setPage(1);
+    setSelected(null);
+    setResult(null);
+    setModal("");
+  }, [path]);
+  useEffect(() => {
+    if (path === "users" && user)
+      api("users")
+        .then(setUsers)
+        .catch((e) => setError(e.message));
+  }, [path, user]);
+  useEffect(() => {
+    return () => {
+      stream.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+  async function action(fn: () => Promise<unknown>, success = "Changes saved") {
+    setBusy(true);
+    try {
+      await fn();
+      await load();
+      notify(success);
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function login(body?: Row, demo = false) {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api("auth/" + (demo ? "demo" : authMode), body || {});
+      setUser(r.user);
+      await load();
+      router.push("/dashboard");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function verify() {
+    setBusy(true);
+    try {
+      const r = await api("verification/verify", { serial, location });
+      setResult(r);
+      await load();
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function makeQr(s: string) {
+    setQr(
+      await QRCode.toDataURL("PHARMATRACE:" + s, {
+        width: 300,
+        margin: 2,
+        color: { dark: "#102a43", light: "#ffffff" },
+      }),
+    );
+    setSerial(s);
+    setModal("qr");
+  }
+  async function scan() {
+    try {
+      if (!("BarcodeDetector" in window)) {
+        notify(
+          "Camera scanning is unavailable in this browser. Enter the serial or QR payload manually.",
+        );
+        return;
+      }
+      setScanning(true);
+      stream.current = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      setTimeout(async () => {
+        if (!video.current) return;
+        video.current.srcObject = stream.current;
+        await video.current.play();
+        const detector = new (window as any).BarcodeDetector({
+          formats: ["qr_code"],
+        });
+        const timer = setInterval(async () => {
+          if (!video.current || !stream.current?.active) {
+            clearInterval(timer);
+            return;
+          }
+          try {
+            const codes = await detector.detect(video.current);
+            if (codes[0]) {
+              setSerial(codes[0].rawValue);
+              stream.current?.getTracks().forEach((t) => t.stop());
+              setScanning(false);
+              clearInterval(timer);
+            }
+          } catch {
+            clearInterval(timer);
+            stream.current?.getTracks().forEach((t) => t.stop());
+            setScanning(false);
+          }
+        }, 800);
+      }, 150);
+    } catch {
+      setScanning(false);
+      notify("Camera access unavailable. Use manual serial entry.");
+    }
+  }
+  async function report(kind: string, format: string) {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/reports/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, format, search }),
+      });
+      if (!r.ok) throw new Error("Report generation failed");
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pharmatrace-${kind}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      await load();
+      notify("Report exported");
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const metrics = useMemo(() => {
+    const v = data.verifications || [],
+      s = data.shipments || [],
+      b = data.batches || [];
+    return {
+      products: (data.serials || []).length,
+      batches: b.length,
+      shipments: s.filter((r) => r.status !== "Delivered").length,
+      verified: v.filter((r) => r.status === "Verified").length,
+      suspicious: v.filter((r) => r.risk >= 30).length,
+      alerts: (data.alerts || []).filter((r) => r.status !== "Resolved").length,
+      expired: b.filter((r) => r.expiry < new Date().toISOString().slice(0, 10))
+        .length,
+      investigations: (data.investigations || []).filter(
+        (r) => r.status !== "Resolved",
+      ).length,
+      excursions: (data.temperatures || []).filter((t) => {
+        const sh = s.find((r) => r.id === t.shipment_id);
+        return (
+          sh && (t.temperature < sh.min_temp || t.temperature > sh.max_temp)
+        );
+      }).length,
+    };
+  }, [data]);
+  const trend = useMemo(() => {
+    const grouped: Record<string, Row> = {};
+    for (const v of data.verifications || []) {
+      const day = v.created_at.slice(0, 10);
+      grouped[day] ||= { date: day, verified: 0, flagged: 0 };
+      grouped[day][v.risk >= 30 ? "flagged" : "verified"]++;
+    }
+    return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
+  }, [data]);
+  const distribution = [
+    { name: "Verified", value: metrics.verified, color: "#16a394" },
+    { name: "Flagged for review", value: metrics.suspicious, color: "#f4b04a" },
+    {
+      name: "Unverified",
+      value: Math.max(
+        0,
+        metrics.products -
+          new Set((data.verifications || []).map((r) => r.serial)).size,
+      ),
+      color: "#dce5ef",
+    },
+  ];
+  const title = navigation.find((n) => n[0] === path)?.[1] || "Overview";
+  const source =
+    path === "verification"
+      ? data.verifications
+      : path === "batches"
+        ? data.batches
+        : path === "shipments" ||
+            path === "supply-chain" ||
+            path === "cold-chain"
+          ? data.shipments
+          : path === "manufacturers" ||
+              path === "distributors" ||
+              path === "pharmacies"
+            ? (data.organizations || []).filter((r) =>
+                path === "manufacturers"
+                  ? r.type === "Manufacturer"
+                  : path === "distributors"
+                    ? ["Distributor", "Warehouse"].includes(r.type)
+                    : ["Pharmacy", "Hospital"].includes(r.type),
+              )
+            : path === "investigations"
+              ? data.investigations
+              : path === "alerts"
+                ? data.alerts
+                : path === "audit"
+                  ? data.audit
+                  : path === "inventory"
+                    ? data.inventory
+                    : path === "users"
+                      ? users
+                      : path === "counterfeit-detection"
+                        ? (data.verifications || []).filter((r) => r.risk >= 30)
+                        : path === "traceability"
+                          ? data.serials
+                          : data.products;
+  const rows = (source || []).filter(
+    (r) =>
+      JSON.stringify(r).toLowerCase().includes(search.toLowerCase()) &&
+      (filter === "All statuses" || r.status === filter),
+  );
+  const statuses = Array.from(
+    new Set((source || []).map((r) => r.status).filter(Boolean)),
+  );
+  const pageRows = rows.slice((page - 1) * 8, page * 8);
+  const formFields: Record<string, [string, string, string][]> = {
+    product: [
+      ["name", "Product name", "text"],
+      ["manufacturer", "Manufacturer", "text"],
+      ["category", "Category", "text"],
+      ["min_temp", "Minimum temperature (°C)", "number"],
+      ["max_temp", "Maximum temperature (°C)", "number"],
+      ["barcode", "Barcode", "text"],
+    ],
+    batch: [
+      ["batch_number", "Batch number", "text"],
+      ["product_id", "Product", "product"],
+      ["manufactured", "Manufacturing date", "date"],
+      ["expiry", "Expiry date", "date"],
+      ["quantity", "Quantity", "number"],
+    ],
+    shipment: [
+      ["batch_id", "Batch", "batch"],
+      ["origin", "Origin", "text"],
+      ["destination", "Destination", "text"],
+      ["quantity", "Quantity", "number"],
+      ["expected_delivery", "Expected delivery", "date"],
+    ],
+    investigation: [
+      ["title", "Investigation title", "text"],
+      ["serial", "Serial number", "text"],
+    ],
+  };
+  async function submitForm(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const f = new FormData(event.currentTarget),
+      body: Row = Object.fromEntries(f);
+    for (const key of ["min_temp", "max_temp", "quantity"])
+      if (key in body) body[key] = Number(body[key]);
+    await action(async () => {
+      await api(
+        modal === "product"
+          ? "products"
+          : modal === "batch"
+            ? "batches"
+            : modal === "shipment"
+              ? "shipments"
+              : "investigations",
+        body,
+      );
+      setModal("");
+    }, "Record created and added to the audit trail");
+  }
+
+  if (loading && !user)
+    return (
+      <div className="loading">
+        <ShieldCheck size={42} />
+        <h2>PharmaTrace AI</h2>
+        <p>Connecting your supply chain workspace…</p>
+      </div>
+    );
+  if (!user)
+    return (
+      <div className="auth-page">
+        <div className="auth-story">
+          <div className="brand">
+            <div className="brand-icon">
+              <ShieldCheck />
+            </div>
+            PharmaTrace <b>AI</b>
+          </div>
+          <div>
+            <div className="eyebrow light">CONFIDENCE AT EVERY HANDOFF</div>
+            <h1>
+              Every medicine.
+              <br />
+              Every movement.
+              <br />
+              <span>Accounted for.</span>
+            </h1>
+            <p>
+              Connected traceability and explainable intelligence for a safer
+              pharmaceutical supply chain.
+            </p>
+            <div className="auth-stats">
+              <div>
+                <GitBranch />
+                <b>Full journey</b>
+                <small>End-to-end traceability</small>
+              </div>
+              <div>
+                <Sparkles />
+                <b>10 specialists</b>
+                <small>One coordinated workflow</small>
+              </div>
+            </div>
+          </div>
+          <small>
+            Synthetic demonstration · Human decisions always remain in control
+          </small>
+        </div>
+        <div className="auth-form">
+          <span className="badge green">WORKSPACE ACCESS</span>
+          <h2>
+            {authMode === "register"
+              ? "Create your account"
+              : "Welcome to PharmaTrace"}
+          </h2>
+          <p>Sign in to your pharmaceutical intelligence workspace.</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              login(Object.fromEntries(new FormData(e.currentTarget)));
+            }}
+          >
+            {authMode === "register" && (
+              <label>
+                Full name
+                <input name="name" required placeholder="Your full name" />
+              </label>
+            )}
+            <label>
+              Work email
+              <input
+                name="email"
+                type="email"
+                required
+                placeholder="you@organization.com"
+              />
+            </label>
+            <label>
+              Password
+              <input
+                name="password"
+                type="password"
+                minLength={8}
+                required
+                placeholder="At least 8 characters"
+              />
+            </label>
+            {error && <div className="error">{error}</div>}
+            <button className="button full" disabled={busy}>
+              {busy
+                ? "Connecting…"
+                : authMode === "register"
+                  ? "Create account"
+                  : "Sign in"}
+              <ArrowRight size={17} />
+            </button>
+          </form>
+          <div className="divider">or explore the platform</div>
+          <Button
+            secondary
+            disabled={busy}
+            onClick={() => login(undefined, true)}
+          >
+            <FlaskConical size={17} />
+            Open synthetic demo
+            <ArrowUpRight size={16} />
+          </Button>
+          <p className="small">
+            {authMode === "login"
+              ? "New to PharmaTrace?"
+              : "Already registered?"}{" "}
+            <button
+              className="text-button"
+              onClick={() =>
+                setAuthMode(authMode === "login" ? "register" : "login")
+              }
+            >
+              {authMode === "login" ? "Create account" : "Sign in"}
+            </button>
+          </p>
+          <div className="demo-note">
+            <Shield size={18} />
+            <span>
+              Demo data is synthetic. Risk signals are recommendations for
+              investigation, not confirmed counterfeit findings.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+
+  function table(columns: [string, string][], records = pageRows) {
+    return (
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {columns.map(([key, label]) => (
+                <th key={key}>{label}</th>
+              ))}
+              <th aria-label="Open record" />
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((r) => (
+              <tr
+                key={r.id}
+                onClick={() => setSelected(r)}
+                tabIndex={0}
+                onKeyDown={(e) => e.key === "Enter" && setSelected(r)}
+              >
+                {columns.map(([key]) => (
+                  <td key={key}>
+                    {key === "status" || key === "priority" ? (
+                      <Badge value={r[key]} />
+                    ) : key === "risk" ? (
+                      <span
+                        className={
+                          "risk-number " + (r.risk >= 60 ? "danger" : "")
+                        }
+                      >
+                        {r.risk}
+                        <small>/100</small>
+                      </span>
+                    ) : key === "created_at" ? (
+                      new Date(r[key]).toLocaleDateString("en-IN")
+                    ) : (
+                      String(r[key] ?? "—")
+                    )}
+                  </td>
+                ))}
+                <td>
+                  <ChevronRight size={16} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!records.length && <Empty />}
+      </div>
+    );
+  }
+  function tablePanel(columns: [string, string][]) {
+    return (
+      <section className="panel">
+        <div className="table-toolbar">
+          <div className="search-box">
+            <Search size={16} />
+            <input
+              aria-label="Search records"
+              placeholder="Search records…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+          <select
+            aria-label="Filter status"
+            value={filter}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option>All statuses</option>
+            {statuses.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+          <span className="muted small">{rows.length} records</span>
+        </div>
+        {table(columns)}
+        <div className="pagination">
+          <span>
+            Showing{" "}
+            {rows.length ? Math.min((page - 1) * 8 + 1, rows.length) : 0}–
+            {Math.min(page * 8, rows.length)} of {rows.length}
+          </span>
+          <div>
+            <button
+              disabled={page === 1}
+              onClick={() => setPage(page - 1)}
+              aria-label="Previous page"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span>{page}</span>
+            <button
+              disabled={page * 8 >= rows.length}
+              onClick={() => setPage(page + 1)}
+              aria-label="Next page"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+  function resultPanel(r: Row) {
+    return (
+      <section className="panel result">
+        <div className="section-heading">
+          <div>
+            <div className="eyebrow">EVIDENCE-LED ASSESSMENT</div>
+            <h2>{r.product?.product || r.serial}</h2>
+          </div>
+          <Badge value={r.status} />
+        </div>
+        <div className="result-score">
+          <div className={"score " + (r.risk >= 60 ? "danger" : "")}>
+            {r.risk}
+            <small>/ 100</small>
+          </div>
+          <div>
+            <h3>
+              {r.risk >= 80
+                ? "Critical"
+                : r.risk >= 60
+                  ? "High"
+                  : r.risk >= 30
+                    ? "Medium"
+                    : "Low"}{" "}
+              demonstration risk
+            </h3>
+            <p>
+              Confidence reflects evidence coverage, not probability of
+              counterfeit.
+            </p>
+            <small>
+              {r.evidence?.filter((e: Row) => e.passed).length} checks passed ·{" "}
+              {r.history?.length} agent steps
+            </small>
+          </div>
+        </div>
+        <p>{r.explanation}</p>
+        <div className="evidence-list">
+          {r.evidence?.map((e: Row, i: number) => (
+            <div key={i}>
+              {e.passed ? (
+                <CheckCircle2 className="teal" size={18} />
+              ) : (
+                <AlertTriangle className="warning" size={18} />
+              )}
+              <div>
+                <b>{e.check}</b>
+                <p>{e.detail}</p>
+              </div>
+              {!e.passed && <span className="weight">+{e.weight}</span>}
+            </div>
+          ))}
+        </div>
+        <div className="recommendation">
+          <Shield size={20} />
+          <div>
+            <b>Recommended next step</b>
+            <p>{r.recommendation}</p>
+          </div>
+        </div>
+        <small className="muted">
+          Configurable demo thresholds: Low 0–29 · Medium 30–59 · High 60–79 ·
+          Critical 80–100. No laboratory confirmation.
+        </small>
+      </section>
+    );
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className={"sidebar " + (mobile ? "open" : "")}>
+        <Link className="brand" href="/dashboard">
+          <div className="brand-icon">
+            <ShieldCheck size={25} />
+          </div>
+          <span>
+            PharmaTrace <b>AI</b>
+          </span>
+        </Link>
+        <div className="workspace">
+          <div className="workspace-icon">
+            <Building2 size={18} />
+          </div>
+          <div>
+            <b>PharmaTrace Network</b>
+            <small>Enterprise workspace</small>
+          </div>
+          <ChevronDown size={14} />
+        </div>
+        <div className="nav-label">WORKSPACE</div>
+        <nav>
+          {navigation.map(([href, label, Icon], i) => (
+            <div key={href}>
+              {i === 11 && (
+                <div className="nav-label intelligence">
+                  INTELLIGENCE & GOVERNANCE
+                </div>
+              )}
+              <Link
+                href={"/" + href}
+                onClick={() => setMobile(false)}
+                className={path === href ? "nav-link active" : "nav-link"}
+              >
+                <Icon size={18} />
+                <span>{label}</span>
+                {href === "alerts" && metrics.alerts > 0 && (
+                  <em>{metrics.alerts}</em>
+                )}
+                {href === "agents" && <span className="live-dot" />}
+              </Link>
+            </div>
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          <div className="system-status">
+            <span className="live-dot" />
+            Evidence engine online
+          </div>
+          <div className="user">
+            <div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div>
+            <div>
+              <b>{user.name}</b>
+              <small>{user.role}</small>
+            </div>
+            <button
+              aria-label="Log out"
+              onClick={() =>
+                action(async () => {
+                  await api("auth/logout", {});
+                  setUser(null);
+                }, "Signed out")
+              }
+            >
+              <LogOut size={17} />
+            </button>
+          </div>
+        </div>
+      </aside>
+      <div className="main-shell">
+        <header className="topbar">
+          <button
+            className="mobile-menu"
+            onClick={() => setMobile(!mobile)}
+            aria-label="Toggle navigation"
+          >
+            <Menu />
+          </button>
+          <div className="breadcrumb">
+            Workspace <ChevronRight size={13} />
+            <b>{title}</b>
+          </div>
+          <div className="topbar-right">
+            <div className="global-search">
+              <Search size={16} />
+              <input
+                aria-label="Global search"
+                placeholder="Search serials, batches, shipments…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
+              <kbd>⌘ K</kbd>
+            </div>
+            <Link
+              href="/alerts"
+              className="notification"
+              aria-label="Notifications"
+            >
+              <Bell size={20} />
+              <i />
+            </Link>
+            <div className="top-avatar">{user.name[0]}</div>
+          </div>
+        </header>
+        <main>
+          <div className="demo-banner">
+            <FlaskConical size={15} />
+            <span>
+              <b>Demonstration workspace</b> · Synthetic data. Evidence rules +
+              LangGraph. Human review required for consequential actions.
+            </span>
+            <span className="demo-pill">DEMO</span>
+          </div>
+          <div className="page-heading">
+            <div>
+              <div className="eyebrow">PHARMACEUTICAL INTELLIGENCE</div>
+              <h1>
+                {title}
+                {path === "dashboard" && (
+                  <span className="live-tag">
+                    <span className="live-dot" /> Live workspace
+                  </span>
+                )}
+              </h1>
+              <p>
+                {descriptions[path] ||
+                  "Manage your connected pharmaceutical operations with a complete audit trail."}
+              </p>
+            </div>
+            <div className="heading-actions">
+              {path === "dashboard" || path === "analytics" ? (
+                <>
+                  <Button
+                    secondary
+                    onClick={() => report("verifications", "csv")}
+                  >
+                    <Download size={16} />
+                    Export report
+                  </Button>
+                  <Button onClick={() => router.push("/verification")}>
+                    <ScanLine size={17} />
+                    Verify medicine
+                  </Button>
+                </>
+              ) : [
+                  "batches",
+                  "shipments",
+                  "investigations",
+                  "manufacturers",
+                ].includes(path) ? (
+                <Button
+                  onClick={() =>
+                    setModal(
+                      path === "batches"
+                        ? "batch"
+                        : path === "shipments"
+                          ? "shipment"
+                          : path === "manufacturers"
+                            ? "product"
+                            : "investigation",
+                    )
+                  }
+                >
+                  <Plus size={17} />
+                  {path === "batches"
+                    ? "Create batch"
+                    : path === "shipments"
+                      ? "Create shipment"
+                      : path === "manufacturers"
+                        ? "Register product"
+                        : "Open investigation"}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          {error && (
+            <div className="error">
+              {error}
+              <button onClick={load}>Retry</button>
+            </div>
+          )}
+
+          {(path === "dashboard" || path === "analytics") && (
+            <>
+              <div className="stats-grid">
+                {[
+                  [
+                    Package,
+                    "Serialized medicines",
+                    metrics.products,
+                    "Across " + metrics.batches + " registered batches",
+                    "teal",
+                  ],
+                  [
+                    ShieldCheck,
+                    "Verified medicines",
+                    metrics.verified,
+                    "Matched application records",
+                    "blue",
+                  ],
+                  [
+                    Truck,
+                    "Active shipments",
+                    metrics.shipments,
+                    "Across the distribution network",
+                    "purple",
+                  ],
+                  [
+                    ShieldAlert,
+                    "Open risk alerts",
+                    metrics.alerts,
+                    "Require attention and review",
+                    "orange",
+                  ],
+                ].map(([Icon, label, value, note, color]: any) => (
+                  <div className="stat-card" key={label}>
+                    <div className="stat-top">
+                      <span>{label}</span>
+                      <div className={"stat-icon " + color}>
+                        <Icon size={20} />
+                      </div>
+                    </div>
+                    <div className="stat-value">
+                      {value.toLocaleString()}
+                      <span className={"stat-indicator " + color}>
+                        {color === "orange" ? (
+                          <AlertTriangle size={15} />
+                        ) : (
+                          <ArrowUpRight size={15} />
+                        )}
+                      </span>
+                    </div>
+                    <p>{note}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="dashboard-grid">
+                <section className="panel chart-panel">
+                  <div className="section-heading">
+                    <div>
+                      <h2>Verification activity</h2>
+                      <p>Registered checks and signals requiring review</p>
+                    </div>
+                    <span className="subtle-label">Recorded activity</span>
+                  </div>
+                  <div className="chart-legend">
+                    <span>
+                      <i style={{ background: "#13a99b" }} />
+                      Verified
+                    </span>
+                    <span>
+                      <i style={{ background: "#edac48" }} />
+                      Flagged for review
+                    </span>
+                  </div>
+                  <div className="chart">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={trend}>
+                        <defs>
+                          <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor="#14ac9b"
+                              stopOpacity={0.2}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="#14ac9b"
+                              stopOpacity={0}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid
+                          strokeDasharray="3 5"
+                          vertical={false}
+                          stroke="#edf0f4"
+                        />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                          allowDecimals={false}
+                        />
+                        <Tooltip />
+                        <Area
+                          type="monotone"
+                          dataKey="verified"
+                          stroke="#13a99b"
+                          strokeWidth={3}
+                          fill="url(#area)"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="flagged"
+                          stroke="#edac48"
+                          strokeWidth={2}
+                          fill="transparent"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </section>
+                <section className="panel authenticity">
+                  <div className="section-heading">
+                    <div>
+                      <h2>Authenticity overview</h2>
+                      <p>Serialized product coverage</p>
+                    </div>
+                    <ShieldCheck size={20} className="muted" />
+                  </div>
+                  <div className="donut">
+                    <ResponsiveContainer width="100%" height={195}>
+                      <PieChart>
+                        <Pie
+                          data={distribution}
+                          dataKey="value"
+                          innerRadius={65}
+                          outerRadius={85}
+                          paddingAngle={3}
+                          stroke="none"
+                        >
+                          {distribution.map((d) => (
+                            <Cell key={d.name} fill={d.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="donut-label">
+                      <b>{metrics.products}</b>
+                      <small>serialized units</small>
+                    </div>
+                  </div>
+                  <div className="distribution">
+                    {distribution.map((d) => (
+                      <div key={d.name}>
+                        <span>
+                          <i style={{ background: d.color }} />
+                          {d.name}
+                        </span>
+                        <b>{d.value}</b>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+              <div className="mini-metrics">
+                {[
+                  [
+                    "Active investigations",
+                    metrics.investigations,
+                    ClipboardList,
+                  ],
+                  ["Expired batches", metrics.expired, Clock],
+                  ["Temperature excursions", metrics.excursions, Thermometer],
+                  [
+                    "Verification checks",
+                    (data.verifications || []).length,
+                    ScanLine,
+                  ],
+                ].map(([label, value, Icon]: any) => (
+                  <Link
+                    key={label}
+                    href={
+                      label === "Active investigations"
+                        ? "/investigations"
+                        : label === "Expired batches"
+                          ? "/batches"
+                          : label === "Temperature excursions"
+                            ? "/cold-chain"
+                            : "/verification"
+                    }
+                  >
+                    <Icon size={19} />
+                    <span>{label}</span>
+                    <b>{value}</b>
+                    <ChevronRight size={16} />
+                  </Link>
+                ))}
+              </div>
+              <div className="dashboard-grid lower">
+                <section className="panel">
+                  <div className="section-heading">
+                    <div>
+                      <h2>Recent verifications</h2>
+                      <p>Latest medicine authentication results</p>
+                    </div>
+                    <Link className="text-link" href="/verification">
+                      View all <ArrowRight size={14} />
+                    </Link>
+                  </div>
+                  {table(
+                    [
+                      ["serial", "SERIAL NUMBER"],
+                      ["product", "PRODUCT"],
+                      ["status", "STATUS"],
+                      ["risk", "RISK SCORE"],
+                    ],
+                    (data.verifications || [])
+                      .filter((r) =>
+                        JSON.stringify(r)
+                          .toLowerCase()
+                          .includes(search.toLowerCase()),
+                      )
+                      .slice(0, 5),
+                  )}
+                </section>
+                <section className="panel alerts-panel">
+                  <div className="section-heading">
+                    <div>
+                      <h2>Priority signals</h2>
+                      <p>Attention where it matters</p>
+                    </div>
+                    <span className="count">{metrics.alerts}</span>
+                  </div>
+                  {(data.alerts || [])
+                    .filter((a) => a.status !== "Resolved")
+                    .slice(0, 3)
+                    .map((a) => (
+                      <button
+                        className="alert-item"
+                        key={a.id}
+                        onClick={() => {
+                          router.push("/alerts");
+                        }}
+                      >
+                        <div
+                          className={
+                            "alert-icon " +
+                            (a.priority === "Critical" ? "red" : "amber")
+                          }
+                        >
+                          <AlertTriangle size={18} />
+                        </div>
+                        <div>
+                          <b>{a.title}</b>
+                          <span>
+                            {a.category} · {a.priority} priority
+                          </span>
+                        </div>
+                        <ChevronRight size={16} />
+                      </button>
+                    ))}
+                  <Link className="panel-footer-link" href="/alerts">
+                    Review all alerts <ArrowRight size={14} />
+                  </Link>
+                </section>
+              </div>
+              <section className="intelligence-banner">
+                <div className="ai-orb">
+                  <Sparkles size={25} />
+                </div>
+                <div>
+                  <div className="eyebrow">
+                    YOUR CONNECTED INTELLIGENCE LAYER
+                  </div>
+                  <h2>Ten specialists. One clear picture.</h2>
+                  <p>
+                    Run an evidence-led workflow across traceability, batch
+                    verification, shipment monitoring, and risk.
+                  </p>
+                </div>
+                <Button onClick={() => router.push("/agents")}>
+                  Open agent center <ArrowRight size={16} />
+                </Button>
+              </section>
+              {path === "analytics" && (
+                <section className="panel chart-panel">
+                  <div className="section-heading">
+                    <h2>Shipment status distribution</h2>
+                  </div>
+                  <div className="chart">
+                    <ResponsiveContainer>
+                      <BarChart
+                        data={[
+                          "Dispatched",
+                          "In transit",
+                          "Delayed",
+                          "Delivered",
+                        ].map((status) => ({
+                          name: status,
+                          count: (data.shipments || []).filter(
+                            (s) => s.status === status,
+                          ).length,
+                        }))}
+                      >
+                        <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                        <XAxis dataKey="name" />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip />
+                        <Bar
+                          dataKey="count"
+                          fill="#148f91"
+                          radius={[5, 5, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+
+          {(path === "verification" || path === "counterfeit-detection") && (
+            <>
+              <div className="verification-grid">
+                <section className="panel verify-form">
+                  <div className="section-heading">
+                    <div>
+                      <h2>Authenticate a medicine</h2>
+                      <p>Scan a PharmaTrace QR code or enter its serial.</p>
+                    </div>
+                    <ScanLine className="teal" />
+                  </div>
+                  <div className="scan-zone">
+                    <div className="scan-frame">
+                      <ScanLine size={48} />
+                    </div>
+                    <h3>One scan. Connected evidence.</h3>
+                    <p>Synthetic serialization credentials</p>
+                    <Button secondary onClick={scan}>
+                      <Camera size={16} />
+                      Scan QR code
+                    </Button>
+                    {scanning && (
+                      <>
+                        <video ref={video} playsInline muted />
+                        <button
+                          onClick={() => {
+                            stream.current
+                              ?.getTracks()
+                              .forEach((t) => t.stop());
+                            setScanning(false);
+                          }}
+                        >
+                          Stop camera
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <label>
+                    Serial number or QR payload
+                    <input
+                      value={serial}
+                      onChange={(e) => setSerial(e.target.value)}
+                      placeholder="PT-2026-000003"
+                    />
+                  </label>
+                  <label>
+                    Verification location
+                    <input
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="City or facility"
+                    />
+                  </label>
+                  <Button disabled={busy} onClick={verify}>
+                    {busy ? (
+                      <RefreshCw className="spin" size={16} />
+                    ) : (
+                      <ShieldCheck size={17} />
+                    )}
+                    Verify against registry
+                    <ArrowRight size={16} />
+                  </Button>
+                  <div className="sample-links">
+                    <small>Try a scenario</small>
+                    <button onClick={() => setSerial("PT-2026-000001")}>
+                      Registered
+                    </button>
+                    <button onClick={() => setSerial("PT-2026-000003")}>
+                      Cold chain
+                    </button>
+                    <button onClick={() => setSerial("PT-2026-000005")}>
+                      Expired
+                    </button>
+                    <button onClick={() => setSerial("PT-UNKNOWN-001")}>
+                      Unknown
+                    </button>
+                  </div>
+                </section>
+                {result ? (
+                  resultPanel(result)
+                ) : (
+                  <section className="panel result-placeholder">
+                    <div className="shield-illustration">
+                      <ShieldCheck size={64} />
+                    </div>
+                    <h2>Trust begins with evidence</h2>
+                    <p>
+                      Run a verification to review matched records, custody
+                      history, temperature evidence, and an explainable risk
+                      assessment.
+                    </p>
+                    <div className="check-chips">
+                      <span>
+                        <Check size={14} />
+                        Registry match
+                      </span>
+                      <span>
+                        <Check size={14} />
+                        Batch & expiry
+                      </span>
+                      <span>
+                        <Check size={14} />
+                        Cold chain
+                      </span>
+                      <span>
+                        <Check size={14} />
+                        Human oversight
+                      </span>
+                    </div>
+                  </section>
+                )}
+              </div>
+              <div className="section-heading">
+                <h2>
+                  {path === "counterfeit-detection"
+                    ? "Flagged assessments"
+                    : "Verification history"}
+                </h2>
+                <Button
+                  secondary
+                  onClick={() => report("verifications", "csv")}
+                >
+                  <Download size={15} />
+                  Export
+                </Button>
+              </div>
+              {tablePanel([
+                ["serial", "SERIAL"],
+                ["product", "PRODUCT"],
+                ["status", "ASSESSMENT"],
+                ["risk", "RISK"],
+                ["created_at", "RECORDED"],
+              ])}
+            </>
+          )}
+
+          {path === "batches" && (
+            <>
+              {tablePanel([
+                ["batch_number", "BATCH NUMBER"],
+                ["product", "PRODUCT"],
+                ["manufacturer", "MANUFACTURER"],
+                ["quantity", "QUANTITY"],
+                ["expiry", "EXPIRY"],
+                ["status", "STATUS"],
+              ])}
+              <div className="section-heading products-heading">
+                <h2>Product registry</h2>
+                <Button secondary onClick={() => setModal("product")}>
+                  <Plus size={16} />
+                  Register product
+                </Button>
+              </div>
+              {table(
+                [
+                  ["name", "PRODUCT"],
+                  ["manufacturer", "MANUFACTURER"],
+                  ["category", "CATEGORY"],
+                  ["status", "STATUS"],
+                ],
+                (data.products || []).filter((r) =>
+                  JSON.stringify(r)
+                    .toLowerCase()
+                    .includes(search.toLowerCase()),
+                ),
+              )}
+            </>
+          )}
+          {path === "traceability" && (
+            <>
+              {tablePanel([
+                ["serial", "SERIAL NUMBER"],
+                ["product", "PRODUCT"],
+                ["status", "STATUS"],
+              ])}
+              <div className="info-note">
+                <GitBranch size={18} />
+                Select a serialized medicine to explore its append-only custody
+                timeline and generate its QR code.
+              </div>
+            </>
+          )}
+          {["manufacturers", "distributors", "pharmacies"].includes(path) &&
+            tablePanel([
+              ["name", "ORGANIZATION"],
+              ["type", "PARTICIPANT TYPE"],
+              ["location", "LOCATION"],
+              ["contact", "CONTACT"],
+              ["status", "REGISTRY STATUS"],
+            ])}
+          {path === "inventory" &&
+            tablePanel([
+              ["product", "PRODUCT"],
+              ["location", "LOCATION"],
+              ["quantity", "QUANTITY"],
+              ["status", "STATUS"],
+            ])}
+          {path === "shipments" &&
+            tablePanel([
+              ["reference", "SHIPMENT"],
+              ["product", "PRODUCT"],
+              ["origin", "ORIGIN"],
+              ["destination", "DESTINATION"],
+              ["expected_delivery", "EXPECTED DELIVERY"],
+              ["status", "STATUS"],
+            ])}
+          {(path === "supply-chain" || path === "cold-chain") && (
+            <>
+              <section className="panel network-panel">
+                <div className="section-heading">
+                  <div>
+                    <h2>
+                      {path === "supply-chain"
+                        ? "Connected distribution network"
+                        : "Temperature monitoring"}
+                    </h2>
+                    <p>
+                      {path === "supply-chain"
+                        ? "Synthetic locations · Select a route to inspect its records"
+                        : "Readings are compared against each shipment’s product limits"}
+                    </p>
+                  </div>
+                  <Badge value="Synthetic data" />
+                </div>
+                {path === "supply-chain" ? (
+                  <div className="network-grid">
+                    {(data.shipments || [])
+                      .filter((r) =>
+                        JSON.stringify(r)
+                          .toLowerCase()
+                          .includes(search.toLowerCase()),
+                      )
+                      .slice(0, 12)
+                      .map((s, i) => (
+                        <button
+                          key={s.id}
+                          className={
+                            "route-card " +
+                            (s.route_deviation ? "route-risk" : "")
+                          }
+                          onClick={() => setSelected(s)}
+                        >
+                          <div>
+                            <MapPin size={18} />
+                            <b>{s.origin}</b>
+                            <span className="route-line">
+                              <Truck size={17} />
+                            </span>
+                            <b>{s.destination}</b>
+                          </div>
+                          <footer>
+                            <small>{s.reference}</small>
+                            <Badge
+                              value={
+                                s.route_deviation ? "Route anomaly" : s.status
+                              }
+                            />
+                          </footer>
+                        </button>
+                      ))}
+                  </div>
+                ) : (
+                  <>
+                    <div className="chart">
+                      <ResponsiveContainer>
+                        <LineChart
+                          data={(data.temperatures || [])
+                            .filter(
+                              (t) =>
+                                t.shipment_id ===
+                                (selected?.id || data.shipments?.[2]?.id),
+                            )
+                            .sort((a, b) =>
+                              a.timestamp.localeCompare(b.timestamp),
+                            )
+                            .map((t) => ({
+                              ...t,
+                              time: new Date(t.timestamp).toLocaleTimeString(
+                                "en-IN",
+                                { hour: "2-digit", minute: "2-digit" },
+                              ),
+                            }))}
+                        >
+                          <CartesianGrid strokeDasharray="3 4" />
+                          <XAxis dataKey="time" tick={{ fontSize: 11 }} />
+                          <YAxis unit="°C" />
+                          <Tooltip />
+                          <Line
+                            dataKey="temperature"
+                            stroke="#0fa89a"
+                            strokeWidth={3}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <p className="small muted">
+                      Select a shipment below to inspect its temperature limits
+                      and evidence.
+                    </p>
+                  </>
+                )}
+              </section>
+              {tablePanel([
+                ["reference", "SHIPMENT"],
+                ["product", "PRODUCT"],
+                ["min_temp", "MIN °C"],
+                ["max_temp", "MAX °C"],
+                ["status", "STATUS"],
+              ])}
+            </>
+          )}
+
+          {path === "agents" && (
+            <>
+              <section className="agent-intro">
+                <div>
+                  <span className="badge blue">
+                    <Sparkles size={13} />
+                    LANGGRAPH WORKFLOW
+                  </span>
+                  <h2>Ask your supply chain.</h2>
+                  <p>
+                    Specialist agents retrieve records, share evidence, and
+                    explain the signals.
+                  </p>
+                </div>
+                <div className="workflow-strip">
+                  {[
+                    "Request",
+                    "Orchestrate",
+                    "Verify",
+                    "Assess risk",
+                    "Human review",
+                  ].map((s, i) => (
+                    <span key={s}>
+                      {i > 0 && <ArrowRight size={15} />}
+                      <b>{s}</b>
+                    </span>
+                  ))}
+                </div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    action(async () => {
+                      const r = await api("agents/run", { serial, message });
+                      setResult(r);
+                    }, "Workflow completed");
+                  }}
+                >
+                  <Sparkles size={20} />
+                  <input
+                    aria-label="Ask agent"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="Investigate PT-2026-000003 or check its cold chain…"
+                  />
+                  <button className="button" disabled={busy}>
+                    <Send size={17} />
+                    {busy ? "Running…" : "Run workflow"}
+                  </button>
+                </form>
+                <div className="prompt-chips">
+                  {[
+                    "Verify PT-2026-000001",
+                    "Check cold chain PT-2026-000003",
+                    "Explain risk PT-2026-000008",
+                  ].map((p) => (
+                    <button key={p} onClick={() => setMessage(p)}>
+                      {p}
+                      <ArrowUpRight size={13} />
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <div className="agent-grid">
+                {[
+                  "Orchestrator",
+                  "Traceability",
+                  "Batch Verification",
+                  "Counterfeit Detection",
+                  "Shipment Monitoring",
+                  "Cold Chain Monitoring",
+                  "Risk Assessment",
+                  "Investigation",
+                  "Compliance & Policy",
+                  "Report Generation",
+                ].map((name, i) => {
+                  const runs = (data.executions || [])
+                    .flatMap((e) => e.history || [])
+                    .filter((h) => h.agent === name);
+                  return (
+                    <section className="panel agent-card" key={name}>
+                      <div className="agent-card-top">
+                        <div className={"agent-icon tone-" + (i % 4)}>
+                          <Sparkles size={22} />
+                        </div>
+                        <span className="badge green">
+                          <span className="live-dot" />
+                          Ready
+                        </span>
+                      </div>
+                      <h3>{name}</h3>
+                      <p>
+                        {
+                          [
+                            "Routes tasks and coordinates shared evidence.",
+                            "Retrieves custody stages and detects gaps.",
+                            "Checks expiry, dates, and manufacturer records.",
+                            "Checks identifier usage and suspicious patterns.",
+                            "Identifies route anomalies and delivery delays.",
+                            "Compares readings to product storage limits.",
+                            "Combines weighted, explainable findings.",
+                            "Prepares evidence for authorized review.",
+                            "Retrieves internal handling requirements.",
+                            "Produces evidence-based investigation summaries.",
+                          ][i]
+                        }
+                      </p>
+                      <div className="agent-stats">
+                        <span>
+                          <b>
+                            {
+                              runs.filter((r) => r.status === "Completed")
+                                .length
+                            }
+                          </b>{" "}
+                          completed
+                        </span>
+                        <span>
+                          <b>
+                            {runs.filter((r) => r.status === "Failed").length}
+                          </b>{" "}
+                          failed
+                        </span>
+                        <span>
+                          <b>
+                            {runs.length
+                              ? Math.round(
+                                  runs.reduce((a, r) => a + r.duration_ms, 0) /
+                                    runs.length,
+                                )
+                              : 0}
+                          </b>{" "}
+                          ms avg.
+                        </span>
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+              {result && resultPanel(result)}
+              <section className="panel">
+                <div className="section-heading">
+                  <h2>Execution history</h2>
+                  <span className="muted small">Recorded workflow runs</span>
+                </div>
+                {table(
+                  [
+                    ["serial", "SERIAL"],
+                    ["task", "TASK"],
+                    ["status", "RESULT"],
+                    ["risk", "RISK"],
+                    ["created_at", "EXECUTED"],
+                  ],
+                  data.executions || [],
+                )}
+              </section>
+            </>
+          )}
+
+          {path === "investigations" &&
+            tablePanel([
+              ["title", "INVESTIGATION"],
+              ["serial", "SERIAL"],
+              ["assigned_to", "ASSIGNEE"],
+              ["risk", "RISK"],
+              ["status", "STATUS"],
+            ])}
+          {path === "alerts" &&
+            tablePanel([
+              ["title", "SIGNAL"],
+              ["category", "CATEGORY"],
+              ["priority", "PRIORITY"],
+              ["status", "STATUS"],
+              ["created_at", "DETECTED"],
+            ])}
+          {path === "audit" &&
+            tablePanel([
+              ["actor", "ACTOR"],
+              ["action", "ACTION"],
+              ["entity", "ENTITY"],
+              ["detail", "DETAIL"],
+              ["created_at", "RECORDED"],
+            ])}
+          {path === "reports" && (
+            <>
+              <div className="report-grid">
+                {[
+                  ["Traceability", "events", GitBranch],
+                  ["Medicine verification", "verifications", ShieldCheck],
+                  ["Batch analysis", "batches", Package],
+                  ["Shipment & cold chain", "shipments", Truck],
+                  ["Investigation findings", "investigations", ClipboardList],
+                  ["Compliance audit", "audit", Shield],
+                  ["Inventory", "inventory", Box],
+                  ["Risk signals", "alerts", Bell],
+                ].map(([name, kind, Icon]: any) => (
+                  <section className="panel report-card" key={kind}>
+                    <Icon size={26} className="teal" />
+                    <h3>{name}</h3>
+                    <p>
+                      Export scoped records with organization, generation date,
+                      and evidence context.
+                    </p>
+                    <div>
+                      <Button
+                        secondary
+                        disabled={busy}
+                        onClick={() => report(kind, "csv")}
+                      >
+                        <Download size={15} />
+                        CSV
+                      </Button>
+                      <Button
+                        secondary
+                        disabled={busy}
+                        onClick={() => report(kind, "pdf")}
+                      >
+                        <FileText size={15} />
+                        PDF
+                      </Button>
+                    </div>
+                  </section>
+                ))}
+              </div>
+              <section className="panel">
+                <div className="section-heading">
+                  <h2>Generated reports</h2>
+                </div>
+                {table(
+                  [
+                    ["name", "REPORT"],
+                    ["format", "FORMAT"],
+                    ["records", "RECORDS"],
+                    ["generated_by", "GENERATED BY"],
+                    ["created_at", "DATE"],
+                  ],
+                  data.reports || [],
+                )}
+              </section>
+            </>
+          )}
+          {path === "users" && (
+            <section className="panel">
+              <div className="section-heading">
+                <h2>Organization members</h2>
+                <Badge value="Server-enforced roles" />
+              </div>
+              {table(
+                [
+                  ["name", "NAME"],
+                  ["email", "EMAIL"],
+                  ["role", "ROLE"],
+                ],
+                users,
+              )}
+              <p className="panel-padding small muted">
+                New registrations receive the Pharmacist role. Administrators
+                can change other organization members’ roles from the member
+                detail view.
+              </p>
+            </section>
+          )}
+          {path === "settings" && (
+            <div className="settings-grid">
+              <section className="panel panel-padding">
+                <h2>Workspace configuration</h2>
+                <label>
+                  Organization
+                  <input readOnly value={user.org} />
+                </label>
+                <label>
+                  Signed-in account
+                  <input readOnly value={user.email} />
+                </label>
+                <label>
+                  Current role
+                  <input readOnly value={user.role} />
+                </label>
+                <div className="info-note">
+                  <ShieldCheck size={20} />
+                  Permissions are verified by the API on every protected
+                  operation.
+                </div>
+              </section>
+              <section className="panel panel-padding">
+                <h2>Evidence and safety policies</h2>
+                <div className="settings-row">
+                  <span>Agent runtime</span>
+                  <b>LangGraph</b>
+                </div>
+                <div className="settings-row">
+                  <span>Risk engine</span>
+                  <b>Explainable rules</b>
+                </div>
+                <div className="settings-row">
+                  <span>Data source</span>
+                  <Badge value="Synthetic demonstration" />
+                </div>
+                <div className="settings-row">
+                  <span>Human approvals</span>
+                  <Badge value="Required" />
+                </div>
+                <p>
+                  Hosted demo storage may reset when the serverless instance
+                  restarts. Configure PostgreSQL and Supabase Auth for durable
+                  production operation.
+                </p>
+                <p>
+                  No assessment confirms counterfeit status or replaces
+                  regulatory review.
+                </p>
+              </section>
+            </div>
+          )}
+          <footer className="main-footer">
+            <span>
+              PharmaTrace AI <span>·</span> Connected evidence. Safer supply
+              chains.
+            </span>
+            <span>
+              <span className="live-dot" />
+              Synthetic demonstration
+            </span>
+          </footer>
+        </main>
+      </div>
+
+      {selected && (
+        <div className="drawer-backdrop" onClick={() => setSelected(null)}>
+          <aside className="drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-heading">
+              <div>
+                <div className="eyebrow">RECORD DETAILS</div>
+                <h2>
+                  {selected.reference ||
+                    selected.serial ||
+                    selected.batch_number ||
+                    selected.title ||
+                    selected.name ||
+                    "Record"}
+                </h2>
+              </div>
+              <button
+                onClick={() => setSelected(null)}
+                aria-label="Close details"
+              >
+                <X />
+              </button>
+            </div>
+            <Badge value={selected.status || selected.role || "Recorded"} />
+            <div className="detail-fields">
+              {Object.entries(selected)
+                .filter(
+                  ([k, v]) =>
+                    !Array.isArray(v) &&
+                    typeof v !== "object" &&
+                    !["id", "created_at", "content_base64"].includes(k),
+                )
+                .map(([k, v]) => (
+                  <div key={k}>
+                    <span>{k.replaceAll("_", " ")}</span>
+                    <b>{String(v)}</b>
+                  </div>
+                ))}
+            </div>
+            {selected.serial && (
+              <>
+                <div className="drawer-actions">
+                  <Button secondary onClick={() => makeQr(selected.serial)}>
+                    <ScanLine size={16} />
+                    Generate QR
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setSerial(selected.serial);
+                      setSelected(null);
+                      router.push("/verification");
+                    }}
+                  >
+                    <ShieldCheck size={16} />
+                    Verify
+                  </Button>
+                </div>
+                <h3>Chain of custody</h3>
+                <div className="timeline">
+                  {(data.events || [])
+                    .filter((e) => e.serial === selected.serial)
+                    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+                    .map((e) => (
+                      <div key={e.id}>
+                        <i />
+                        <b>{e.stage}</b>
+                        <p>
+                          {e.organization} · {e.location}
+                        </p>
+                        <small>
+                          {new Date(e.timestamp).toLocaleString("en-IN")}
+                        </small>
+                      </div>
+                    ))}
+                </div>
+              </>
+            )}
+            {selected.batch_number && (
+              <Button
+                onClick={() =>
+                  action(async () => {
+                    const s = await api(
+                      "batches/" + selected.id + "/serialize",
+                      {},
+                    );
+                    setSelected(s);
+                    await makeQr(s.serial);
+                  }, "Serialized medicine registered")
+                }
+              >
+                <Plus size={16} />
+                Serialize a unit
+              </Button>
+            )}
+            {selected.reference && (
+              <>
+                <h3>Shipment operations</h3>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const f = new FormData(e.currentTarget);
+                    action(async () => {
+                      await api(
+                        "shipments/" + selected.id,
+                        { status: f.get("status"), reason: f.get("reason") },
+                        "PUT",
+                      );
+                      setSelected(null);
+                    });
+                  }}
+                >
+                  <label>
+                    Status
+                    <select name="status" defaultValue={selected.status}>
+                      {["Dispatched", "In transit", "Delayed", "Delivered"].map(
+                        (s) => (
+                          <option key={s}>{s}</option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                  <label>
+                    Handling note
+                    <input name="reason" />
+                  </label>
+                  <button className="button" disabled={busy}>
+                    Record milestone
+                  </button>
+                </form>
+                <form
+                  className="temperature-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const f = new FormData(e.currentTarget);
+                    action(
+                      () =>
+                        api("shipments/" + selected.id + "/temperature", {
+                          temperature: Number(f.get("temperature")),
+                        }),
+                      "Temperature recorded",
+                    );
+                  }}
+                >
+                  <label>
+                    Temperature reading (°C)
+                    <input
+                      name="temperature"
+                      type="number"
+                      step="0.1"
+                      required
+                    />
+                  </label>
+                  <button className="button secondary" disabled={busy}>
+                    Record reading
+                  </button>
+                </form>
+                <h3>Temperature history</h3>
+                <p className="muted small">
+                  Registered limits: {selected.min_temp}–{selected.max_temp} °C
+                </p>
+                {(data.temperatures || [])
+                  .filter((t) => t.shipment_id === selected.id)
+                  .map((t) => (
+                    <div key={t.id} className="settings-row">
+                      <span>
+                        {new Date(t.timestamp).toLocaleTimeString("en-IN")}
+                      </span>
+                      <Badge value={t.temperature + " °C"} />
+                    </div>
+                  ))}
+              </>
+            )}
+            {path === "investigations" && (
+              <>
+                <h3>Investigation workflow</h3>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const f = Object.fromEntries(new FormData(e.currentTarget));
+                    action(async () => {
+                      await api("investigations/" + selected.id, f, "PUT");
+                      setSelected(null);
+                    });
+                  }}
+                >
+                  <label>
+                    Status
+                    <select name="status" defaultValue={selected.status}>
+                      {[
+                        "New",
+                        "Under Investigation",
+                        "Awaiting Approval",
+                        "Resolved",
+                        "Escalated",
+                      ].map((s) => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Assigned investigator
+                    <input
+                      name="assigned_to"
+                      defaultValue={selected.assigned_to}
+                    />
+                  </label>
+                  <label>
+                    Reason / resolution
+                    <textarea name="reason" minLength={10} />
+                  </label>
+                  <button className="button" disabled={busy}>
+                    Update investigation
+                  </button>
+                </form>
+                <h3>Evidence and notes</h3>
+                {selected.notes?.map((n: Row, i: number) => (
+                  <div className="note" key={i}>
+                    <p>{n.text}</p>
+                    <small>
+                      {n.actor} · {n.timestamp}
+                    </small>
+                  </div>
+                ))}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const f = new FormData(e.currentTarget);
+                    action(async () => {
+                      const r = await api(
+                        "investigations/" + selected.id + "/notes",
+                        { text: f.get("text") },
+                      );
+                      setSelected({ ...r, id: selected.id });
+                    });
+                  }}
+                >
+                  <label>
+                    Add note
+                    <textarea name="text" required minLength={3} />
+                  </label>
+                  <button className="button secondary" disabled={busy}>
+                    Save note
+                  </button>
+                </form>
+                <label>
+                  Upload supporting evidence (TXT, CSV, PDF; max 1 MB)
+                  <input
+                    type="file"
+                    accept=".txt,.csv,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const f = new FormData();
+                        f.append("file", file);
+                        action(
+                          () =>
+                            api(
+                              "investigations/" + selected.id + "/evidence",
+                              f,
+                            ),
+                          "Evidence uploaded",
+                        );
+                      }
+                    }}
+                  />
+                </label>
+                <h3>Human approval</h3>
+                <p className="small muted">
+                  Decisions are recorded for review. No physical or regulated
+                  action is executed.
+                </p>
+                {selected.approvals?.map((a: Row, i: number) => (
+                  <div className="note" key={i}>
+                    <Badge value={a.decision} />
+                    <b> {a.action}</b>
+                    <p>{a.reason}</p>
+                    <small>{a.actor}</small>
+                  </div>
+                ))}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const f = Object.fromEntries(new FormData(e.currentTarget));
+                    action(async () => {
+                      const r = await api(
+                        "investigations/" + selected.id + "/approval",
+                        f,
+                      );
+                      setSelected({ ...r, id: selected.id });
+                    }, "Human decision recorded");
+                  }}
+                >
+                  <label>
+                    Proposed action
+                    <select name="action">
+                      {["quarantine", "release", "recall", "destruction"].map(
+                        (s) => (
+                          <option key={s}>{s}</option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                  <label>
+                    Decision
+                    <select name="decision">
+                      <option>approved</option>
+                      <option>rejected</option>
+                    </select>
+                  </label>
+                  <label>
+                    Documented reason
+                    <textarea name="reason" required minLength={10} />
+                  </label>
+                  <button className="button" disabled={busy}>
+                    Record authorized decision
+                  </button>
+                </form>
+              </>
+            )}
+            {path === "alerts" && (
+              <div className="drawer-actions">
+                <Button
+                  secondary
+                  onClick={() =>
+                    action(async () => {
+                      await api(
+                        "alerts/" + selected.id,
+                        { status: "Acknowledged" },
+                        "PUT",
+                      );
+                      setSelected(null);
+                    })
+                  }
+                >
+                  Acknowledge
+                </Button>
+                <Button
+                  onClick={() => {
+                    setModal("resolve");
+                  }}
+                >
+                  Resolve with reason
+                </Button>
+              </div>
+            )}
+            {path === "users" && selected.id !== user.id && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const f = new FormData(e.currentTarget);
+                  action(async () => {
+                    await api(
+                      "users/" + selected.id + "/role",
+                      { role: f.get("role") },
+                      "PUT",
+                    );
+                    setUsers(await api("users"));
+                    setSelected(null);
+                  });
+                }}
+              >
+                <label>
+                  Role
+                  <select name="role" defaultValue={selected.role}>
+                    {[
+                      "System Administrator",
+                      "Manufacturer",
+                      "Distributor",
+                      "Warehouse Manager",
+                      "Pharmacist",
+                      "Hospital Administrator",
+                      "Compliance Officer",
+                      "Investigator",
+                    ].map((r) => (
+                      <option key={r}>{r}</option>
+                    ))}
+                  </select>
+                </label>
+                <button className="button">Save role</button>
+              </form>
+            )}
+            {selected.evidence?.length > 0 && (
+              <>
+                <h3>Recorded evidence</h3>
+                {selected.evidence.map((e: Row, i: number) => (
+                  <div key={i} className="note">
+                    <b>{e.check || e.filename}</b>
+                    <p>{e.detail || e.sha256}</p>
+                  </div>
+                ))}
+              </>
+            )}
+          </aside>
+        </div>
+      )}
+      {modal && (
+        <div className="modal-backdrop" onClick={() => setModal("")}>
+          <section className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="section-heading">
+              <h2>
+                {modal === "qr"
+                  ? "Synthetic serialization QR"
+                  : modal === "resolve"
+                    ? "Resolve alert"
+                    : "Create " + modal}
+              </h2>
+              <button aria-label="Close dialog" onClick={() => setModal("")}>
+                <X />
+              </button>
+            </div>
+            {modal === "qr" ? (
+              <div className="qr-dialog">
+                <img src={qr} alt={"QR for " + serial} />
+                <b>{serial}</b>
+                <p>
+                  This QR is a synthetic application identifier, not an official
+                  pharmaceutical credential.
+                </p>
+                <a className="button" href={qr} download={serial + ".png"}>
+                  <Download size={16} />
+                  Download QR
+                </a>
+              </div>
+            ) : modal === "resolve" ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const f = new FormData(e.currentTarget);
+                  action(async () => {
+                    await api(
+                      "alerts/" + selected?.id,
+                      { status: "Resolved", reason: f.get("reason") },
+                      "PUT",
+                    );
+                    setSelected(null);
+                    setModal("");
+                  });
+                }}
+              >
+                <label>
+                  Resolution reason
+                  <textarea name="reason" required minLength={10} />
+                </label>
+                <button className="button">Resolve alert</button>
+              </form>
+            ) : (
+              <form onSubmit={submitForm}>
+                {(formFields[modal] || []).map(([key, label, type]) => (
+                  <label key={key}>
+                    {label}
+                    {type === "product" || type === "batch" ? (
+                      <select name={key} required>
+                        <option value="">Select {type}</option>
+                        {(type === "product"
+                          ? data.products
+                          : data.batches
+                        )?.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name || r.batch_number}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        name={key}
+                        type={type}
+                        step={key.includes("temp") ? "0.1" : undefined}
+                        defaultValue={
+                          key === "min_temp"
+                            ? 15
+                            : key === "max_temp"
+                              ? 30
+                              : undefined
+                        }
+                        required={key !== "barcode"}
+                        min={key === "quantity" ? 1 : undefined}
+                      />
+                    )}
+                  </label>
+                ))}
+                <div className="modal-footer">
+                  <Button secondary onClick={() => setModal("")}>
+                    Cancel
+                  </Button>
+                  <button className="button" disabled={busy}>
+                    {busy ? "Saving…" : "Create record"}
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        </div>
+      )}
+      {toast && (
+        <div className="toast" role="status">
+          <CheckCircle2 size={19} />
+          {toast}
+          <button
+            onClick={() => setToast("")}
+            aria-label="Dismiss notification"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
